@@ -1,0 +1,49 @@
+{
+  "name": "lexicon-writer",
+  "version": "0.1.0",
+  "description": "A writing suite and knowledge base tool — part of the Lexicon ecosystem",
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "build:win": "npm run build && electron-builder --win",
+    "build:mac": "npm run build && electron-builder --mac",
+    "build:linux": "npm run build && electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.greenbottle.lexicon-writer",
+    "productName": "Lexicon Writer",
+    "directories": {
+      "output": "release"
+    }
+  },
+  "devDependencies": {
+    "@electron-toolkit/tsconfig": "^1.0.1",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.4.19",
+    "daisyui": "^4.12.10",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.4",
+    "typescript": "^5.5.2",
+    "vite": "^5.3.1"
+  },
+  "dependencies": {
+    "@chenglou/pretext": "^0.0.5",
+    "@electron-toolkit/preload": "^3.0.1",
+    "@electron-toolkit/utils": "^3.0.0",
+    "@tiptap/extension-character-count": "^2.4.0",
+    "@tiptap/extension-placeholder": "^2.4.0",
+    "@tiptap/react": "^2.4.0",
+    "@tiptap/starter-kit": "^2.4.0",
+    "@xyflow/react": "^12.3.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}
