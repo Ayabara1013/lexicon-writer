@@ -1,6 +1,8 @@
 import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { initDb } from './db'
+import { setupIpc } from './ipc'
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -33,6 +35,8 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.greenbottle.lexicon-writer')
+  initDb()
+  setupIpc()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

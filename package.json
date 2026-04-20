@@ -21,6 +21,8 @@
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
+    "@electron/rebuild": "^4.0.3",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.7.0",
@@ -43,6 +45,7 @@
     "@tiptap/react": "^2.4.0",
     "@tiptap/starter-kit": "^2.4.0",
     "@xyflow/react": "^12.3.2",
+    "better-sqlite3": "^12.9.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   }
