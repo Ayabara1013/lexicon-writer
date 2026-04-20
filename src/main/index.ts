@@ -19,7 +19,10 @@ function createWindow(): void {
     }
   })
 
-  win.on('ready-to-show', () => win.show())
+  win.on('ready-to-show', () => {
+    win.show()
+    if (is.dev) win.webContents.openDevTools()
+  })
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
@@ -35,7 +38,11 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.greenbottle.lexicon-writer')
-  initDb()
+  try {
+    initDb()
+  } catch (e) {
+    console.error('[db] init failed:', e)
+  }
   setupIpc()
 
   app.on('browser-window-created', (_, window) => {

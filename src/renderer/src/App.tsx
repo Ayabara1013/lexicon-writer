@@ -7,11 +7,13 @@ export default function App() {
   const [docs, setDocs] = useState<DocMeta[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
 
+  const [error, setError] = useState<string | null>(null)
+
   useEffect(() => {
-    window.api.docs.list().then((rows) => {
-      setDocs(rows)
-      if (rows.length > 0) setActiveId(rows[0].id)
-    })
+    if (!window.api) { setError('window.api is undefined — preload not loaded'); return }
+    window.api.docs.list()
+      .then((rows) => { setDocs(rows); if (rows.length > 0) setActiveId(rows[0].id) })
+      .catch((e) => setError(String(e)))
   }, [])
 
   async function handleCreate(type: 'chapter' | 'note') {
@@ -34,6 +36,12 @@ export default function App() {
       return next
     })
   }
+
+  if (error) return (
+    <div style={{ padding: 32, color: '#f87171', fontFamily: 'monospace', background: '#13111e', height: '100vh' }}>
+      <strong>Startup error:</strong><br />{error}
+    </div>
+  )
 
   return (
     <div className="flex h-screen bg-base-100 text-base-content" data-theme="lexicon">

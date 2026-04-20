@@ -19,6 +19,7 @@ let db: Database.Database
 
 export function initDb(): void {
   const dbPath = join(app.getPath('userData'), 'lexicon-writer.db')
+  console.log('[db] path:', dbPath)
   db = new Database(dbPath)
   db.pragma('journal_mode = WAL')
 
@@ -38,12 +39,18 @@ export function initDb(): void {
 
 function seedIfEmpty(): void {
   const count = (db.prepare('SELECT COUNT(*) as c FROM documents').get() as { c: number }).c
+  console.log('[db] document count:', count)
   if (count > 0) return
-  seedSpellshot()
+  try {
+    seedSpellshot()
+  } catch (e) {
+    console.error('[db] seed failed:', e)
+  }
 }
 
 function seedSpellshot(): void {
   const spellshotPath = 'C:/Users/jalla/Downloads/Spellshot(1).md'
+  console.log('[db] seed: checking', spellshotPath, '→ exists:', existsSync(spellshotPath))
   if (!existsSync(spellshotPath)) return
 
   const raw = readFileSync(spellshotPath, 'utf-8')
@@ -60,6 +67,7 @@ function seedSpellshot(): void {
   })
 
   insertMany(chapters)
+  console.log('[db] seeded', chapters.length, 'chapters')
 
   // Seed a couple of note stubs for key characters
   const notes = [

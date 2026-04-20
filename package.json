@@ -2,7 +2,6 @@
   "name": "lexicon-writer",
   "version": "0.1.0",
   "description": "A writing suite and knowledge base tool — part of the Lexicon ecosystem",
-  "type": "module",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
