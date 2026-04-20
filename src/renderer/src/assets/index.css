@@ -19,6 +19,18 @@ html, body, #root {
   height: 100%;
 }
 
+/* Override prose colours to match lexicon theme */
+.prose {
+  --tw-prose-body: #d4d0e8;
+  --tw-prose-headings: #e8e5f5;
+  --tw-prose-bold: #e8e5f5;
+  --tw-prose-bullets: #7c6af7;
+  --tw-prose-hr: #211e30;
+  --tw-prose-quotes: #a78bfa;
+  --tw-prose-code: #c4b5fd;
+  --tw-prose-links: #7c6af7;
+}
+
 .tiptap p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   float: left;
