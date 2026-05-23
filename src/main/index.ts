@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { initDb } from './db'
 import { setupIpc } from './ipc'
+import { scheduleNightlyBackup } from './backup'
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -44,6 +45,7 @@ app.whenReady().then(() => {
     console.error('[db] init failed:', e)
   }
   setupIpc()
+  scheduleNightlyBackup()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

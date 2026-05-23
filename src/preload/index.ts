@@ -8,6 +8,9 @@ const api = {
     create: (title: string, type: 'chapter' | 'note') => ipcRenderer.invoke('docs:create', title, type),
     update: (id: string, fields: { title?: string; content?: string }) => ipcRenderer.invoke('docs:update', id, fields),
     delete: (id: string) => ipcRenderer.invoke('docs:delete', id)
+  },
+  backup: {
+    run: () => ipcRenderer.invoke('backup:run')
   }
 }
 
