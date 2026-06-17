@@ -3,6 +3,7 @@ import { listDocs, getDoc, createDoc, updateDoc, deleteDoc, updateDocPosition, g
 import { autoCommit, manualCommit, getStatus, createBranch, switchBranch, deleteBranch } from './git'
 import { cloudSignIn, cloudSignOut, cloudGetSession, cloudPushAll, cloudPullAll, cloudPushDoc } from './cloud'
 import { exportManuscript } from './export'
+import { performNightlyBackup } from './backup'
 
 const syncTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
@@ -25,6 +26,7 @@ export function setupIpc(): void {
     return true
   })
   ipcMain.handle('docs:delete', (_e, id: string) => { deleteDoc(id); return true })
+<<<<<<< HEAD
   ipcMain.handle('docs:updatePosition', (_e, id: string, x: number, y: number) => { updateDocPosition(id, x, y); return true })
 
   ipcMain.handle('settings:get', (_e, key: string) => getSetting(key))
@@ -62,4 +64,5 @@ export function setupIpc(): void {
   ipcMain.handle('cloud:pull', () => cloudPullAll())
 
   ipcMain.handle('export:manuscript', () => exportManuscript())
+  ipcMain.handle('backup:run', () => performNightlyBackup())
 }

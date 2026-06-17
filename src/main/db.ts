@@ -17,6 +17,10 @@ export type DocMeta = Omit<DocRow, 'content'>
 
 let db: Database.Database
 
+export function getDb(): Database.Database {
+  return db
+}
+
 export function initDb(): void {
   const dbPath = join(app.getPath('userData'), 'lexicon-writer.db')
   console.log('[db] path:', dbPath)
@@ -31,7 +35,12 @@ export function initDb(): void {
       content TEXT NOT NULL DEFAULT '',
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
-    )
+    );
+    CREATE TABLE IF NOT EXISTS backup_stats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      word_count INTEGER NOT NULL,
+      backed_up_at INTEGER NOT NULL
+    );
   `)
 
   seedIfEmpty()

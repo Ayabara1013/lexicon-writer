@@ -49,6 +49,9 @@ const api = {
   },
   export: {
     manuscript: () => ipcRenderer.invoke('export:manuscript'),
+  },
+  backup: {
+    run: () => ipcRenderer.invoke('backup:run')
   }
 }
 
