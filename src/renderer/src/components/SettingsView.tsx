@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { ALL_TOOLBAR_ITEMS, GROUP_LABELS, DEFAULT_NORMAL_IDS, DEFAULT_FOCUS_IDS } from '../toolbarItems'
 import type { ToolbarGroup } from '../toolbarItems'
-import { DEFAULT_FORMATTING } from './Editor'
-import type { EditorFormatting } from './Editor'
+import { DEFAULT_FORMATTING, DEFAULT_TYPOGRAPHY } from './Editor'
+import type { EditorFormatting, TypographySettings } from './Editor'
 
 const C = {
   base:    '#13111e',
@@ -20,15 +20,17 @@ const C = {
 type Props = {
   onToolbarChange: (normal: string[], focus: string[]) => void
   onFormattingChange: (fmt: EditorFormatting) => void
+  onTypographyChange: (t: TypographySettings) => void
 }
 
 const GROUPS = Object.keys(GROUP_LABELS) as ToolbarGroup[]
 
-export default function SettingsView({ onToolbarChange, onFormattingChange }: Props) {
+export default function SettingsView({ onToolbarChange, onFormattingChange, onTypographyChange }: Props) {
   const [normalIds, setNormalIds] = useState<string[]>(DEFAULT_NORMAL_IDS)
   const [focusIds, setFocusIds] = useState<string[]>(DEFAULT_FOCUS_IDS)
   const [saved, setSaved] = useState(false)
   const [fmt, setFmt] = useState<EditorFormatting>(DEFAULT_FORMATTING)
+  const [typo, setTypo] = useState<TypographySettings>(DEFAULT_TYPOGRAPHY)
   const [exporting, setExporting] = useState(false)
   const [exportMsg, setExportMsg] = useState<string | null>(null)
 
@@ -52,13 +54,21 @@ export default function SettingsView({ onToolbarChange, onFormattingChange }: Pr
       window.api.settings.get('editor_line_height'),
       window.api.settings.get('editor_first_line_indent'),
       window.api.settings.get('editor_indent_size'),
-    ]).then(([n, f, lh, fli, is]) => {
+      window.api.settings.get('typography_curly_quotes'),
+      window.api.settings.get('typography_em_dash'),
+      window.api.settings.get('typography_ellipsis'),
+    ]).then(([n, f, lh, fli, is, cq, emd, ell]) => {
       if (n) { try { setNormalIds(JSON.parse(n)) } catch {} }
       if (f) { try { setFocusIds(JSON.parse(f)) } catch {} }
       setFmt({
         lineHeight: lh ?? DEFAULT_FORMATTING.lineHeight,
         firstLineIndent: fli ?? DEFAULT_FORMATTING.firstLineIndent,
         indentSize: is ?? DEFAULT_FORMATTING.indentSize,
+      })
+      setTypo({
+        curlyQuotes: (cq ?? '1') === '1',
+        emDash:      (emd ?? '0') === '1',
+        ellipsis:    (ell ?? '1') === '1',
       })
     })
   }, [])
@@ -78,9 +88,13 @@ export default function SettingsView({ onToolbarChange, onFormattingChange }: Pr
       window.api.settings.set('editor_line_height', fmt.lineHeight),
       window.api.settings.set('editor_first_line_indent', fmt.firstLineIndent),
       window.api.settings.set('editor_indent_size', fmt.indentSize),
+      window.api.settings.set('typography_curly_quotes', typo.curlyQuotes ? '1' : '0'),
+      window.api.settings.set('typography_em_dash',      typo.emDash      ? '1' : '0'),
+      window.api.settings.set('typography_ellipsis',     typo.ellipsis    ? '1' : '0'),
     ])
     onToolbarChange(normalIds, focusIds)
     onFormattingChange(fmt)
+    onTypographyChange(typo)
     setSaved(true)
     setTimeout(() => setSaved(false), 1500)
   }
@@ -89,6 +103,7 @@ export default function SettingsView({ onToolbarChange, onFormattingChange }: Pr
     setNormalIds(DEFAULT_NORMAL_IDS)
     setFocusIds(DEFAULT_FOCUS_IDS)
     setFmt(DEFAULT_FORMATTING)
+    setTypo(DEFAULT_TYPOGRAPHY)
   }
 
   function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
@@ -184,6 +199,48 @@ export default function SettingsView({ onToolbarChange, onFormattingChange }: Pr
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Smart Typography section */}
+        <div style={{ marginBottom: 32 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span>Smart Typography</span>
+            <div style={{ flex: 1, height: 1, background: C.border }}/>
+          </div>
+          <div style={{ background: C.raised, borderRadius: 10, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+            {([
+              {
+                key: 'curlyQuotes' as const,
+                label: 'Curly Quotes',
+                desc: 'Converts " and \' to typographic "curly" quotes',
+              },
+              {
+                key: 'emDash' as const,
+                label: 'Em Dash',
+                desc: 'Converts -- to — (disable for Royal Road / AI-avoidance)',
+              },
+              {
+                key: 'ellipsis' as const,
+                label: 'Ellipsis',
+                desc: 'Converts ... to …',
+              },
+            ]).map((row, idx) => (
+              <div key={row.key} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 14px',
+                borderTop: idx > 0 ? `1px solid ${C.border}` : 'none',
+              }}>
+                <div>
+                  <div style={{ fontSize: 12, color: C.textPri, fontWeight: 500 }}>{row.label}</div>
+                  <div style={{ fontSize: 11, color: C.textMut, marginTop: 2 }}>{row.desc}</div>
+                </div>
+                <Toggle checked={typo[row.key]} onChange={() => setTypo((prev) => ({ ...prev, [row.key]: !prev[row.key] }))} />
+              </div>
+            ))}
+          </div>
+          <p style={{ fontSize: 11, color: C.textMut, margin: '8px 2px 0' }}>
+            Changes take effect after saving — navigate away from the editor and back to apply.
+          </p>
         </div>
 
         {/* Toolbar section */}

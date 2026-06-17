@@ -26,7 +26,6 @@ export function setupIpc(): void {
     return true
   })
   ipcMain.handle('docs:delete', (_e, id: string) => { deleteDoc(id); return true })
-<<<<<<< HEAD
   ipcMain.handle('docs:updatePosition', (_e, id: string, x: number, y: number) => { updateDocPosition(id, x, y); return true })
 
   ipcMain.handle('settings:get', (_e, key: string) => getSetting(key))

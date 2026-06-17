@@ -4,6 +4,8 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { initDb } from './db'
 import { setupIpc } from './ipc'
 import { scheduleNightlyBackup } from './backup'
+import { initGit, autoCommit } from './git'
+import { initCloud, cloudPullAll } from './cloud'
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -44,8 +46,17 @@ app.whenReady().then(() => {
   } catch (e) {
     console.error('[db] init failed:', e)
   }
+  initCloud()
   setupIpc()
   scheduleNightlyBackup()
+  cloudPullAll().then((r) => {
+    if (r.error) console.log('[cloud] pull skipped:', r.error)
+    else if (r.pulled > 0) console.log(`[cloud] pulled ${r.pulled} records`)
+  })
+  initGit().then(() => {
+    autoCommit().then((r) => console.log('[git] launch commit:', r.message))
+    scheduleDailyCommit()
+  }).catch((e) => console.error('[git] init failed:', e))
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
@@ -61,3 +72,18 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
+
+function scheduleDailyCommit(): void {
+  const now = new Date()
+  const targetHour = 3 // 3am
+  const next = new Date(now)
+  next.setHours(targetHour, 0, 0, 0)
+  if (next <= now) next.setDate(next.getDate() + 1)
+  const msUntil = next.getTime() - now.getTime()
+  setTimeout(() => {
+    autoCommit().then((r) => console.log('[git] daily commit:', r.message))
+    setInterval(() => {
+      autoCommit().then((r) => console.log('[git] daily commit:', r.message))
+    }, 24 * 60 * 60 * 1000)
+  }, msUntil)
+}
