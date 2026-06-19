@@ -133,6 +133,42 @@ async function stageAll(): Promise<boolean> {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+async function pushToGitHub(): Promise<void> {
+  const repoUrl = getSetting('github_repo')
+  const pat = getSetting('github_pat')
+  if (!repoUrl || !pat) return
+
+  const g = assertReady()
+  const cleanUrl = repoUrl.replace(/\.git$/, '').replace(/\/$/, '')
+  const authedUrl = cleanUrl.replace(/^https:\/\//, `https://oauth2:${pat}@`) + '.git'
+
+  const branchInfo = await g.branch().catch(() => ({ current: 'main' }))
+  const branch = (branchInfo as { current: string }).current || 'main'
+
+  try {
+    const remotes = await g.getRemotes()
+    if ((remotes as Array<{ name: string }>).find((r) => r.name === 'origin')) {
+      await g.remote(['set-url', 'origin', authedUrl])
+    } else {
+      await g.addRemote('origin', authedUrl)
+    }
+    await g.push(['origin', branch, '--set-upstream'])
+  } finally {
+    // Always restore clean URL so PAT doesn't persist in .git/config
+    await g.remote(['set-url', 'origin', cleanUrl + '.git']).catch(() => {})
+  }
+}
+
+export async function pushGitHub(): Promise<{ pushed: boolean; error?: string }> {
+  try {
+    await pushToGitHub()
+    return { pushed: true }
+  } catch (err) {
+    console.warn('[git] push failed:', err)
+    return { pushed: false, error: String(err) }
+  }
+}
+
 export async function autoCommit(): Promise<{ committed: boolean; message: string }> {
   const autoEnabled = getSetting('git_auto_commit') === '1'
   if (!autoEnabled) return { committed: false, message: 'auto-commit disabled' }
@@ -154,6 +190,7 @@ export async function autoCommit(): Promise<{ committed: boolean; message: strin
 
   await g.commit(message)
   console.log('[git] committed:', message)
+  pushToGitHub().catch((e) => console.warn('[git] push failed:', e))
   return { committed: true, message }
 }
 
@@ -162,6 +199,7 @@ export async function manualCommit(message: string): Promise<void> {
   const hasChanges = await stageAll()
   if (!hasChanges) return
   await assertReady().commit(message || `Manual save ${new Date().toLocaleString()}`)
+  pushToGitHub().catch((e) => console.warn('[git] push failed:', e))
 }
 
 export async function getStatus() {
@@ -192,8 +230,189 @@ export async function getStatus() {
       author: c.author_name
     })),
     branches: branchList,
-    currentBranch
+    currentBranch,
+    repoPath
   }
+}
+
+// ── Diff / word-count / changes ────────────────────────────────────────────────
+
+type Seg = { type: 'context' | 'add' | 'del' | 'hunk'; text: string }
+type DiffFile = { path: string; title: string; segments: Seg[] }
+type ParsedDiff = { files: DiffFile[]; addedWords: number; removedWords: number; wordDelta: number }
+
+const wc = (s: string): number => s.split(/\s+/).filter(Boolean).length
+
+// Resolve a repo file path (chapters/<id>.md) back to its doc title.
+function titleForPath(path: string): string {
+  const m = path.match(/(?:chapters|notes)\/(.+)\.md$/)
+  if (m) {
+    const d = getDoc(m[1])
+    if (d) return d.title
+  }
+  return path.replace(/^.*\//, '')
+}
+
+// Split a --word-diff=plain body into context / add / del runs.
+// Additions are wrapped {+like this+}, deletions [-like this-].
+function segmentsFromBody(body: string): Seg[] {
+  const out: Seg[] = []
+  const re = /(\[-[\s\S]*?-\])|(\{\+[\s\S]*?\+\})/g
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = re.exec(body))) {
+    if (m.index > last) out.push({ type: 'context', text: body.slice(last, m.index) })
+    if (m[1]) out.push({ type: 'del', text: m[1].slice(2, -2) })
+    else out.push({ type: 'add', text: m[2]!.slice(2, -2) })
+    last = re.lastIndex
+  }
+  if (last < body.length) out.push({ type: 'context', text: body.slice(last) })
+  return out
+}
+
+function parseWordDiff(raw: string): ParsedDiff {
+  const files: DiffFile[] = []
+  let cur: DiffFile | null = null
+  let bodyLines: string[] = []
+  const flush = (): void => {
+    if (cur && bodyLines.length) cur.segments.push(...segmentsFromBody(bodyLines.join('\n')))
+    bodyLines = []
+  }
+  for (const line of raw.split('\n')) {
+    if (line.startsWith('diff --git')) {
+      flush()
+      const m = line.match(/ b\/(.+)$/)
+      const path = m ? m[1] : 'file'
+      cur = { path, title: titleForPath(path), segments: [] }
+      files.push(cur)
+      continue
+    }
+    if (!cur) continue
+    if (/^(index |--- |\+\+\+ |old mode|new mode|similarity |dissimilarity |rename |copy |deleted file|new file|Binary files|GIT binary)/.test(line)) continue
+    if (line.startsWith('@@')) {
+      flush()
+      cur.segments.push({ type: 'hunk', text: line })
+      continue
+    }
+    bodyLines.push(line)
+  }
+  flush()
+
+  let addedWords = 0
+  let removedWords = 0
+  for (const f of files) {
+    for (const s of f.segments) {
+      if (s.type === 'add') addedWords += wc(s.text)
+      else if (s.type === 'del') removedWords += wc(s.text)
+    }
+  }
+  return { files, addedWords, removedWords, wordDelta: addedWords - removedWords }
+}
+
+// Net words added minus removed for a single word-diff body (used for log badges).
+function netWordDelta(body: string): number {
+  let add = 0
+  let del = 0
+  let m: RegExpExecArray | null
+  const reA = /\{\+([\s\S]*?)\+\}/g
+  while ((m = reA.exec(body))) add += wc(m[1])
+  const reD = /\[-([\s\S]*?)-\]/g
+  while ((m = reD.exec(body))) del += wc(m[1])
+  return add - del
+}
+
+const COMMIT_SEP = '__LXW_COMMIT__'
+
+// Map short-hash → net word delta for recent commits, in one git call.
+function deltaMapFromLog(raw: string): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const chunk of raw.split(COMMIT_SEP).slice(1)) {
+    const nl = chunk.indexOf('\n')
+    if (nl < 0) continue
+    const full = chunk.slice(0, nl).trim()
+    if (!full) continue
+    out[full.slice(0, 7)] = netWordDelta(chunk.slice(nl + 1))
+  }
+  return out
+}
+
+export async function getWordDeltas(): Promise<Record<string, number>> {
+  const g = assertReady()
+  if (!(await hasCommits())) return {}
+  const raw = await g.raw([
+    'log', '--max-count=50', '--word-diff=plain', '--no-color',
+    `--format=${COMMIT_SEP}%H`, '--', 'chapters', 'notes'
+  ]).catch(() => '')
+  return deltaMapFromLog(raw)
+}
+
+export async function getCommitDiff(
+  hash: string
+): Promise<ParsedDiff & { hash: string; message: string; date: string; author: string }> {
+  const g = assertReady()
+  const raw = await g.raw([
+    'show', hash, '--word-diff=plain', '--no-color', '--format=%H%n%an%n%aI%n%s'
+  ]).catch(() => '')
+  const lines = raw.split('\n')
+  const [fullHash = hash, author = '', dateISO = '', subject = ''] = lines
+  const body = lines.slice(4).join('\n')
+  const parsed = parseWordDiff(body)
+  return { ...parsed, hash: fullHash.slice(0, 7), message: subject, date: dateISO, author }
+}
+
+export async function getChanges(): Promise<{
+  files: { path: string; title: string; status: 'new' | 'modified' | 'deleted' }[]
+  diff: ParsedDiff
+}> {
+  const g = assertReady()
+  await exportDocs()
+  // intent-to-add so brand-new chapters show up in the diff too
+  await g.add(['-N', '--', 'chapters', 'notes']).catch(() => {})
+
+  const status = await g.status()
+  const files: { path: string; title: string; status: 'new' | 'modified' | 'deleted' }[] = []
+  const seen = new Set<string>()
+  const add = (path: string, st: 'new' | 'modified' | 'deleted'): void => {
+    if (seen.has(path)) return
+    seen.add(path)
+    files.push({ path, title: titleForPath(path), status: st })
+  }
+  status.created.forEach((p) => add(p, 'new'))
+  status.not_added.forEach((p) => add(p, 'new'))
+  status.deleted.forEach((p) => add(p, 'deleted'))
+  status.modified.forEach((p) => add(p, 'modified'))
+  status.renamed.forEach((r) => add(r.to, 'modified'))
+
+  const raw = await g.raw(['diff', 'HEAD', '--word-diff=plain', '--no-color']).catch(() => '')
+  return { files, diff: parseWordDiff(raw) }
+}
+
+export async function getDocHistory(docId: string): Promise<{
+  docTitle: string
+  commits: Array<{ hash: string; message: string; date: string; author: string; wordDelta: number }>
+}> {
+  const g = assertReady()
+  const doc = getDoc(docId)
+  const folder = doc?.type === 'note' ? 'notes' : 'chapters'
+  const path = `${folder}/${docId}.md`
+  const docTitle = doc?.title ?? docId
+  if (!(await hasCommits())) return { docTitle, commits: [] }
+
+  const rawDeltas = await g.raw([
+    'log', '--max-count=50', '--word-diff=plain', '--no-color',
+    `--format=${COMMIT_SEP}%H`, '--', path
+  ]).catch(() => '')
+  const deltas = deltaMapFromLog(rawDeltas)
+
+  const logRes = await g.log({ maxCount: 50, file: path }).catch(() => null)
+  const commits = (logRes?.all ?? []).map((c) => ({
+    hash: c.hash.slice(0, 7),
+    message: c.message,
+    date: c.date,
+    author: c.author_name,
+    wordDelta: deltas[c.hash.slice(0, 7)] ?? 0
+  }))
+  return { docTitle, commits }
 }
 
 export async function createBranch(name: string): Promise<void> {

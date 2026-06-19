@@ -1,11 +1,20 @@
 export type { DocMeta, DocRow } from '@shared/types'
 
-export type GitCommit = { hash: string; message: string; date: string; author: string }
+export type GitCommit = { hash: string; message: string; date: string; author: string; wordDelta?: number }
 
 export type GitStatus = {
   branch: string; clean: boolean; files: number
   commits: GitCommit[]; branches: string[]; currentBranch: string
+  repoPath: string
 }
+
+export type DiffSegment = { type: 'context' | 'add' | 'del' | 'hunk'; text: string }
+export type DiffFile = { path: string; title: string; segments: DiffSegment[] }
+export type ParsedDiff = { files: DiffFile[]; addedWords: number; removedWords: number; wordDelta: number }
+export type CommitDiff = ParsedDiff & { hash: string; message: string; date: string; author: string }
+export type ChangedFile = { path: string; title: string; status: 'new' | 'modified' | 'deleted' }
+export type ChangesResult = { files: ChangedFile[]; diff: ParsedDiff }
+export type DocHistory = { docTitle: string; commits: GitCommit[] }
 
 export type Canvas = { id: string; title: string; created_at: number }
 
@@ -76,6 +85,11 @@ declare global {
         createBranch: (name: string) => Promise<void>
         switchBranch: (name: string) => Promise<void>
         deleteBranch: (name: string) => Promise<void>
+        push: () => Promise<{ pushed: boolean; error?: string }>
+        commitDiff: (hash: string) => Promise<CommitDiff>
+        wordDeltas: () => Promise<Record<string, number>>
+        changes: () => Promise<ChangesResult>
+        docHistory: (docId: string) => Promise<DocHistory>
       }
       cloud: {
         signIn: (email: string, password: string) => Promise<{ email: string | null; error: string | null }>

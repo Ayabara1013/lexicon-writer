@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { listDocs, getDoc, createDoc, updateDoc, deleteDoc, updateDocPosition, getSetting, setSetting, getAllSettings, listCanvases, createCanvas, updateCanvas, deleteCanvas, getOrCreateDefaultCanvas, listCanvasNodes, listCanvasEdges, createCanvasNode, updateCanvasNode, deleteCanvasNode, createCanvasEdge, updateCanvasEdge, deleteCanvasEdge, restoreCanvasSnapshot, type CanvasNode, type CanvasEdge } from './db'
-import { autoCommit, manualCommit, getStatus, createBranch, switchBranch, deleteBranch } from './git'
+import { autoCommit, manualCommit, getStatus, createBranch, switchBranch, deleteBranch, pushGitHub, getCommitDiff, getWordDeltas, getChanges, getDocHistory } from './git'
 import { cloudSignIn, cloudSignOut, cloudGetSession, cloudPushAll, cloudPullAll, cloudPushDoc } from './cloud'
 import { exportManuscript } from './export'
 import { performNightlyBackup } from './backup'
@@ -55,6 +55,11 @@ export function setupIpc(): void {
   ipcMain.handle('git:createBranch', (_e, name: string) => createBranch(name))
   ipcMain.handle('git:switchBranch', (_e, name: string) => switchBranch(name))
   ipcMain.handle('git:deleteBranch', (_e, name: string) => deleteBranch(name))
+  ipcMain.handle('git:push', () => pushGitHub())
+  ipcMain.handle('git:commitDiff', (_e, hash: string) => getCommitDiff(hash))
+  ipcMain.handle('git:wordDeltas', () => getWordDeltas())
+  ipcMain.handle('git:changes', () => getChanges())
+  ipcMain.handle('git:docHistory', (_e, docId: string) => getDocHistory(docId))
 
   ipcMain.handle('cloud:signIn', (_e, email: string, password: string) => cloudSignIn(email, password))
   ipcMain.handle('cloud:signOut', () => cloudSignOut())

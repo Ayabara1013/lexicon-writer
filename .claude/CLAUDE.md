@@ -48,11 +48,20 @@ settings  (key TEXT PRIMARY KEY, value TEXT)
 
 ## Git integration
 - Repo lives at `app.getPath('userData')/repo/`
-- Documents exported as markdown to `repo/chapters/` and `repo/notes/` before each commit
+- Documents exported as markdown to `repo/chapters/` and `repo/notes/` before each commit (filename = doc.id, title/content inside)
 - Auto-commit fires on launch + daily at 3am
 - AI commit messages via Ollama/Qwen (if `is_pro=1` and `git_auto_commit=1`)
 - Falls back to `"Writing session MM/DD/YYYY"` if Ollama unavailable
 - `git` variable in git.ts is null until `initGit()` resolves — all functions call `assertReady()`
+- `getStatus()` includes `repoPath` (shown in GitPanel + Settings)
+
+### Git viewer (diff / word-count / changes / per-chapter history)
+All diffs use `git --word-diff=plain` so prose is tracked at the WORD level (not lines). Output markers: additions `{+...+}`, deletions `[-...-]` — parsed in `git.ts` by `segmentsFromBody`/`parseWordDiff` into `{type:'context'|'add'|'del'|'hunk', text}` segments.
+- `getCommitDiff(hash)` — per-file word-diff for one commit (`git show <hash> --word-diff=plain --format=%H%n%an%n%aI%n%s`)
+- `getWordDeltas()` — short-hash → net word delta for recent commits, ONE `git log` call using `__LXW_COMMIT__%H` delimiter (do NOT use null-byte `%x00` format specifiers — they don't round-trip through the tooling)
+- `getChanges()` — runs `exportDocs()` then returns changed files (new/modified/deleted) + working-tree diff (`git diff HEAD --word-diff`); uses `git add -N` so brand-new chapters appear. NOTE: opening the Changes tab writes markdown to disk (the export) — idempotent but a side effect.
+- `getDocHistory(docId)` — commit log filtered to one doc's file (`chapters|notes/<id>.md`) with per-commit word deltas
+- IPC: `git:commitDiff`, `git:wordDeltas`, `git:changes`, `git:docHistory`
 
 ## Key files
 ```
@@ -60,7 +69,7 @@ src/main/
   index.ts          — app entry, calls initDb, setupIpc, initGit, scheduleDailyCommit
   db.ts             — SQLite CRUD + settings + migrations
   ipc.ts            — all ipcMain.handle registrations
-  git.ts            — simple-git wrapper (autoCommit, manualCommit, getStatus, branches)
+  git.ts            — simple-git wrapper (autoCommit, manualCommit, getStatus, branches, word-diff/changes/docHistory)
 
 src/preload/
   index.ts          — contextBridge exposing window.api (docs, settings, git)
@@ -73,7 +82,7 @@ src/renderer/src/
     Editor.tsx          — TipTap editor with toolbar + SystemWindow extension
     Corkboard.tsx       — @xyflow/react canvas, doc cards, drag-to-reposition
     CorkboardNode.tsx   — custom XYFlow node (chapter/note cards)
-    GitPanel.tsx        — branch list, commit history, manual/AI commit buttons
+    GitPanel.tsx        — two-pane: left = repo/GitHub config + branches + snapshot + History/Changes tabs + commit-graph list w/ word-delta badges; right = word-diff viewer. Props: filterDocId/onClearFilter (per-chapter history mode)
     SystemWindowView.tsx — React NodeView for LitRPG system windows
   extensions/
     SystemWindow.ts     — TipTap v2 node extension for LitRPG windows
@@ -87,14 +96,15 @@ src/renderer/src/assets/index.css — prose colour overrides, font-family: Inter
 Three views toggled via buttons in main area header:
 - `✏️ Editor` — TipTap manuscript editor
 - `🗂 Corkboard` — XYFlow canvas with doc cards
-- `⎇ History` — Git panel (branches, commits, AI snapshot)
+- `⎇ History` — Git panel (branches, commits, AI snapshot, word-diff viewer, Changes tab, per-chapter history)
 
 ## Sidebar structure
 - Two tabs: Chapters / Notes
 - Chapters support one level of sub-chapters via `parent_id`
 - Collapse/expand via chevron, shows `+N` badge when collapsed
-- Hover actions: `+` (add sub-chapter, chapters only) + `✕` (delete)
+- Hover actions: `⎇` (view version history — opens History filtered to this doc) + `+` (add sub-chapter, chapters only) + `✕` (delete)
 - Double-click to rename inline
+- `onViewHistory(id)` prop → App's `openDocHistory` → sets `historyFilterDoc` + navigates to history view. NavRail's History button clears the filter (shows all).
 
 ## LitRPG System Windows
 Custom TipTap v2 node (`systemWindow`) insertable via `⚡ System` toolbar dropdown.
@@ -137,3 +147,4 @@ Spellshot (user's own LitRPG novel) seeded from `C:/Users/jalla/Downloads/Spells
 - Revision snapshots (named point-in-time saves) — git-backed
 - Inline comments and markup
 - Automatic local backup copies
+- Auto-closing pairs (VS Code-style) — type `"`/`'`/`(`/`[` and get the closing char auto-inserted with cursor between; press the closing char or Tab to skip past it. Custom TipTap v3 extension intercepting keypresses. NOT the same as smart-typography curly-quote substitution.

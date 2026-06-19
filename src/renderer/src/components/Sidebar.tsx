@@ -28,6 +28,7 @@ type Props = {
   onRename: (id: string, title: string) => void
   onDelete: (id: string) => void
   onReorder: (ids: string[]) => void
+  onViewHistory: (id: string) => void
 }
 
 function countWords(content: string | null | undefined): number {
@@ -47,7 +48,7 @@ function extractText(node: Record<string, unknown>): string {
   return ''
 }
 
-export default function Sidebar({ docs, activeId, onSelect, onCreate, onCreateSub, onRename, onDelete, onReorder }: Props) {
+export default function Sidebar({ docs, activeId, onSelect, onCreate, onCreateSub, onRename, onDelete, onReorder, onViewHistory }: Props) {
   const [tab, setTab] = useState<'chapter' | 'note'>('chapter')
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -186,6 +187,16 @@ export default function Sidebar({ docs, activeId, onSelect, onCreate, onCreateSu
           {/* Hover actions */}
           {!isRenaming && (
             <div className="hidden group-hover:flex" style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', gap: 2 }}>
+              <button
+                onClick={() => onViewHistory(doc.id)}
+                title="View version history"
+                style={{
+                  width: 18, height: 18, borderRadius: 4, border: 'none',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'transparent', cursor: 'pointer', color: C.textMut,
+                  fontSize: 11,
+                }}
+              >⎇</button>
               {tab === 'chapter' && (
                 <button
                   onClick={() => onCreateSub(doc.id)}

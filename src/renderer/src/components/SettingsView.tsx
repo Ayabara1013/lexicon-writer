@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { ALL_TOOLBAR_ITEMS, GROUP_LABELS, DEFAULT_NORMAL_IDS, DEFAULT_FOCUS_IDS } from '../toolbarItems'
 import type { ToolbarGroup } from '../toolbarItems'
-import { DEFAULT_FORMATTING, DEFAULT_TYPOGRAPHY } from './Editor'
-import type { EditorFormatting, TypographySettings } from './Editor'
+import { DEFAULT_FORMATTING, DEFAULT_TYPOGRAPHY, DEFAULT_FOCUS_DIM } from './Editor'
+import type { EditorFormatting, TypographySettings, FocusDimSettings, FocusDimUnit } from './Editor'
 
 const C = {
   base:    '#13111e',
@@ -21,16 +21,22 @@ type Props = {
   onToolbarChange: (normal: string[], focus: string[]) => void
   onFormattingChange: (fmt: EditorFormatting) => void
   onTypographyChange: (t: TypographySettings) => void
+  onFocusDimChange: (d: FocusDimSettings) => void
 }
 
 const GROUPS = Object.keys(GROUP_LABELS) as ToolbarGroup[]
 
-export default function SettingsView({ onToolbarChange, onFormattingChange, onTypographyChange }: Props) {
+export default function SettingsView({ onToolbarChange, onFormattingChange, onTypographyChange, onFocusDimChange }: Props) {
   const [normalIds, setNormalIds] = useState<string[]>(DEFAULT_NORMAL_IDS)
   const [focusIds, setFocusIds] = useState<string[]>(DEFAULT_FOCUS_IDS)
   const [saved, setSaved] = useState(false)
   const [fmt, setFmt] = useState<EditorFormatting>(DEFAULT_FORMATTING)
   const [typo, setTypo] = useState<TypographySettings>(DEFAULT_TYPOGRAPHY)
+  const [focusDim, setFocusDim] = useState<FocusDimSettings>(DEFAULT_FOCUS_DIM)
+  const [githubRepo, setGithubRepo] = useState('')
+  const [githubPat, setGithubPat] = useState('')
+  const [githubSaved, setGithubSaved] = useState(false)
+  const [repoPath, setRepoPath] = useState<string>('')
   const [exporting, setExporting] = useState(false)
   const [exportMsg, setExportMsg] = useState<string | null>(null)
 
@@ -57,7 +63,12 @@ export default function SettingsView({ onToolbarChange, onFormattingChange, onTy
       window.api.settings.get('typography_curly_quotes'),
       window.api.settings.get('typography_em_dash'),
       window.api.settings.get('typography_ellipsis'),
-    ]).then(([n, f, lh, fli, is, cq, emd, ell]) => {
+      window.api.settings.get('focus_dim_unit'),
+      window.api.settings.get('focus_dim_step'),
+      window.api.settings.get('focus_dim_min'),
+      window.api.settings.get('github_repo'),
+      window.api.settings.get('github_pat'),
+    ]).then(([n, f, lh, fli, is, cq, emd, ell, fdu, fds, fdm, ghRepo, ghPat]) => {
       if (n) { try { setNormalIds(JSON.parse(n)) } catch {} }
       if (f) { try { setFocusIds(JSON.parse(f)) } catch {} }
       setFmt({
@@ -70,8 +81,25 @@ export default function SettingsView({ onToolbarChange, onFormattingChange, onTy
         emDash:      (emd ?? '0') === '1',
         ellipsis:    (ell ?? '1') === '1',
       })
+      setFocusDim({
+        unit:        (fdu ?? 'paragraph') as FocusDimUnit,
+        stepOpacity: parseFloat(fds ?? '0.33'),
+        minOpacity:  parseFloat(fdm ?? '0.05'),
+      })
+      setGithubRepo(ghRepo ?? '')
+      setGithubPat(ghPat ?? '')
     })
+    window.api.git.status().then((s) => setRepoPath(s.repoPath)).catch(() => setRepoPath('(unavailable)'))
   }, [])
+
+  async function saveGitHub() {
+    await Promise.all([
+      window.api.settings.set('github_repo', githubRepo.trim()),
+      window.api.settings.set('github_pat',  githubPat.trim()),
+    ])
+    setGithubSaved(true)
+    setTimeout(() => setGithubSaved(false), 1500)
+  }
 
   function toggleNormal(id: string) {
     setNormalIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
@@ -91,10 +119,14 @@ export default function SettingsView({ onToolbarChange, onFormattingChange, onTy
       window.api.settings.set('typography_curly_quotes', typo.curlyQuotes ? '1' : '0'),
       window.api.settings.set('typography_em_dash',      typo.emDash      ? '1' : '0'),
       window.api.settings.set('typography_ellipsis',     typo.ellipsis    ? '1' : '0'),
+      window.api.settings.set('focus_dim_unit',  focusDim.unit),
+      window.api.settings.set('focus_dim_step',  String(focusDim.stepOpacity)),
+      window.api.settings.set('focus_dim_min',   String(focusDim.minOpacity)),
     ])
     onToolbarChange(normalIds, focusIds)
     onFormattingChange(fmt)
     onTypographyChange(typo)
+    onFocusDimChange(focusDim)
     setSaved(true)
     setTimeout(() => setSaved(false), 1500)
   }
@@ -104,6 +136,7 @@ export default function SettingsView({ onToolbarChange, onFormattingChange, onTy
     setFocusIds(DEFAULT_FOCUS_IDS)
     setFmt(DEFAULT_FORMATTING)
     setTypo(DEFAULT_TYPOGRAPHY)
+    setFocusDim(DEFAULT_FOCUS_DIM)
   }
 
   function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
@@ -240,6 +273,125 @@ export default function SettingsView({ onToolbarChange, onFormattingChange, onTy
           </div>
           <p style={{ fontSize: 11, color: C.textMut, margin: '8px 2px 0' }}>
             Changes take effect after saving — navigate away from the editor and back to apply.
+          </p>
+        </div>
+
+        {/* GitHub section */}
+        <div style={{ marginBottom: 32 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span>GitHub Backup</span>
+            <div style={{ flex: 1, height: 1, background: C.border }}/>
+          </div>
+          <div style={{ background: C.raised, borderRadius: 10, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+            {[
+              { label: 'Repository URL', desc: 'Your private GitHub repo — e.g. https://github.com/you/my-novel', value: githubRepo, set: setGithubRepo, type: 'text', placeholder: 'https://github.com/username/my-novel' },
+              { label: 'Personal Access Token', desc: 'Create a token with "Contents" read & write scope at github.com/settings/tokens', value: githubPat, set: setGithubPat, type: 'password', placeholder: 'ghp_••••••••••••••' },
+            ].map((row, idx) => (
+              <div key={row.label} style={{ padding: '12px 14px', borderTop: idx > 0 ? `1px solid ${C.border}` : 'none' }}>
+                <div style={{ fontSize: 12, color: C.textPri, fontWeight: 500, marginBottom: 4 }}>{row.label}</div>
+                <div style={{ fontSize: 11, color: C.textMut, marginBottom: 8 }}>{row.desc}</div>
+                <input
+                  type={row.type}
+                  value={row.value}
+                  onChange={(e) => row.set(e.target.value)}
+                  placeholder={row.placeholder}
+                  style={{ width: '100%', padding: '6px 10px', borderRadius: 6, border: `1px solid ${C.border}`, background: C.overlay, color: C.textPri, fontSize: 12, outline: 'none', boxSizing: 'border-box', fontFamily: row.type === 'password' ? 'monospace' : 'inherit' }}
+                />
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+            <button
+              onClick={saveGitHub}
+              style={{ padding: '6px 16px', borderRadius: 7, border: 'none', background: C.accent, color: '#fff', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
+            >
+              {githubSaved ? 'Saved ✓' : 'Save GitHub Settings'}
+            </button>
+            <p style={{ fontSize: 11, color: C.textMut, margin: 0 }}>
+              Commits push automatically after each snapshot. Repo must exist on GitHub first.
+            </p>
+          </div>
+
+          {/* Local repo path */}
+          <div style={{ marginTop: 12, background: C.raised, borderRadius: 10, border: `1px solid ${C.border}`, padding: '10px 14px' }}>
+            <div style={{ fontSize: 11, color: C.textSec, fontWeight: 500, marginBottom: 4 }}>Local snapshot repo</div>
+            <div style={{ fontSize: 11, color: C.textMut, fontFamily: 'monospace', wordBreak: 'break-all' }}>
+              {repoPath || '…'}
+            </div>
+          </div>
+        </div>
+
+        {/* Focus Mode Dimming section */}
+        <div style={{ marginBottom: 32 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span>Focus Mode Dimming</span>
+            <div style={{ flex: 1, height: 1, background: C.border }}/>
+          </div>
+          <div style={{ background: C.raised, borderRadius: 10, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+            {([
+              {
+                label: 'Dim by',
+                desc: 'What unit to focus on — the active paragraph or the active sentence',
+                content: (
+                  <select
+                    value={focusDim.unit}
+                    onChange={(e) => setFocusDim((p) => ({ ...p, unit: e.target.value as FocusDimUnit }))}
+                    style={{ padding: '4px 8px', borderRadius: 6, border: `1px solid ${C.border}`, background: C.overlay, color: C.textPri, fontSize: 12, cursor: 'pointer', outline: 'none' }}
+                  >
+                    <option value="paragraph">Paragraph</option>
+                    <option value="sentence">Sentence</option>
+                  </select>
+                ),
+              },
+              {
+                label: 'Opacity step',
+                desc: 'How much opacity to subtract per step away from the cursor',
+                content: (
+                  <select
+                    value={String(focusDim.stepOpacity)}
+                    onChange={(e) => setFocusDim((p) => ({ ...p, stepOpacity: parseFloat(e.target.value) }))}
+                    style={{ padding: '4px 8px', borderRadius: 6, border: `1px solid ${C.border}`, background: C.overlay, color: C.textPri, fontSize: 12, cursor: 'pointer', outline: 'none' }}
+                  >
+                    <option value="0.1">Gentle (−10% per step)</option>
+                    <option value="0.2">Moderate (−20% per step)</option>
+                    <option value="0.33">Strong (−33% per step)</option>
+                    <option value="0.5">Dramatic (−50% per step)</option>
+                  </select>
+                ),
+              },
+              {
+                label: 'Minimum opacity',
+                desc: 'How dim distant paragraphs/sentences can get',
+                content: (
+                  <select
+                    value={String(focusDim.minOpacity)}
+                    onChange={(e) => setFocusDim((p) => ({ ...p, minOpacity: parseFloat(e.target.value) }))}
+                    style={{ padding: '4px 8px', borderRadius: 6, border: `1px solid ${C.border}`, background: C.overlay, color: C.textPri, fontSize: 12, cursor: 'pointer', outline: 'none' }}
+                  >
+                    <option value="0">Invisible (0%)</option>
+                    <option value="0.05">Almost hidden (5%)</option>
+                    <option value="0.1">Very dim (10%)</option>
+                    <option value="0.2">Dim (20%)</option>
+                    <option value="0.35">Half-visible (35%)</option>
+                  </select>
+                ),
+              },
+            ] as const).map((row, idx) => (
+              <div key={row.label} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 14px',
+                borderTop: idx > 0 ? `1px solid ${C.border}` : 'none',
+              }}>
+                <div>
+                  <div style={{ fontSize: 12, color: C.textPri, fontWeight: 500 }}>{row.label}</div>
+                  <div style={{ fontSize: 11, color: C.textMut, marginTop: 2 }}>{row.desc}</div>
+                </div>
+                {row.content}
+              </div>
+            ))}
+          </div>
+          <p style={{ fontSize: 11, color: C.textMut, margin: '8px 2px 0' }}>
+            Focus mode dimming applies when Focus Mode is active (toolbar toggle). Save to apply.
           </p>
         </div>
 

@@ -38,7 +38,12 @@ const api = {
     manualCommit: (message: string) => ipcRenderer.invoke('git:manualCommit', message),
     createBranch: (name: string) => ipcRenderer.invoke('git:createBranch', name),
     switchBranch: (name: string) => ipcRenderer.invoke('git:switchBranch', name),
-    deleteBranch: (name: string) => ipcRenderer.invoke('git:deleteBranch', name)
+    deleteBranch: (name: string) => ipcRenderer.invoke('git:deleteBranch', name),
+    push: () => ipcRenderer.invoke('git:push'),
+    commitDiff: (hash: string) => ipcRenderer.invoke('git:commitDiff', hash),
+    wordDeltas: () => ipcRenderer.invoke('git:wordDeltas'),
+    changes: () => ipcRenderer.invoke('git:changes'),
+    docHistory: (docId: string) => ipcRenderer.invoke('git:docHistory', docId),
   },
   cloud: {
     signIn: (email: string, password: string) => ipcRenderer.invoke('cloud:signIn', email, password),

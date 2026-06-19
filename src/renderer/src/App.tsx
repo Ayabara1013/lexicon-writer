@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import type { DocMeta } from './env'
 import NavRail from './components/NavRail'
 import Sidebar from './components/Sidebar'
-import Editor, { DEFAULT_FORMATTING, DEFAULT_TYPOGRAPHY } from './components/Editor'
-import type { EditorFormatting, TypographySettings } from './components/Editor'
+import Editor, { DEFAULT_FORMATTING, DEFAULT_TYPOGRAPHY, DEFAULT_FOCUS_DIM } from './components/Editor'
+import type { EditorFormatting, TypographySettings, FocusDimSettings, FocusDimUnit } from './components/Editor'
 import Corkboard from './components/Corkboard'
 import GitPanel from './components/GitPanel'
 import TalentCanvas from './components/TalentCanvas'
@@ -25,6 +25,8 @@ export default function App() {
   const [formatting, setFormatting] = useState<EditorFormatting>(DEFAULT_FORMATTING)
   const [typography, setTypography] = useState<TypographySettings>(DEFAULT_TYPOGRAPHY)
   const [typographyVersion, setTypographyVersion] = useState(0)
+  const [focusDim, setFocusDim] = useState<FocusDimSettings>(DEFAULT_FOCUS_DIM)
+  const [historyFilterDoc, setHistoryFilterDoc] = useState<string | null>(null)
 
   const navHistory = useRef<Array<{ view: View; activeId: string | null }>>([])
   const currentNav = useRef({ view: 'editor' as View, activeId: null as string | null })
@@ -75,7 +77,10 @@ export default function App() {
       window.api.settings.get('typography_curly_quotes'),
       window.api.settings.get('typography_em_dash'),
       window.api.settings.get('typography_ellipsis'),
-    ]).then(([n, f, lh, fli, is, cq, emd, ell]) => {
+      window.api.settings.get('focus_dim_unit'),
+      window.api.settings.get('focus_dim_step'),
+      window.api.settings.get('focus_dim_min'),
+    ]).then(([n, f, lh, fli, is, cq, emd, ell, fdu, fds, fdm]) => {
       if (n) { try { setToolbarNormal(JSON.parse(n)) } catch {} }
       if (f) { try { setToolbarFocus(JSON.parse(f)) } catch {} }
       setFormatting({
@@ -87,6 +92,11 @@ export default function App() {
         curlyQuotes: (cq ?? '1') === '1',
         emDash:      (emd ?? '0') === '1',
         ellipsis:    (ell ?? '1') === '1',
+      })
+      setFocusDim({
+        unit:        (fdu ?? 'paragraph') as FocusDimUnit,
+        stepOpacity: parseFloat(fds ?? '0.33'),
+        minOpacity:  parseFloat(fdm ?? '0.05'),
       })
     })
   }, [])
@@ -132,6 +142,11 @@ export default function App() {
     navigateDoc(id)
   }, [])
 
+  function openDocHistory(id: string) {
+    setHistoryFilterDoc(id)
+    navigateTo('history')
+  }
+
   if (error) return (
     <div style={{ padding: 32, color: '#f87171', fontFamily: 'monospace', background: '#13111e', height: '100vh' }}>
       <strong>Startup error:</strong><br />{error}
@@ -147,7 +162,7 @@ export default function App() {
     >
       <NavRail
         activeView={view}
-        onNavigate={(v) => navigateTo(v)}
+        onNavigate={(v) => { if (v === 'history') setHistoryFilterDoc(null); navigateTo(v) }}
         onCloudSynced={() => {
           window.api.docs.list().then((rows) => setDocs(rows)).catch(() => {})
         }}
@@ -163,6 +178,7 @@ export default function App() {
           onRename={handleRename}
           onDelete={handleDelete}
           onReorder={handleReorder}
+          onViewHistory={openDocHistory}
         />
       )}
 
@@ -183,13 +199,14 @@ export default function App() {
               <h2 style={{ fontSize: 13, fontWeight: 600, color: '#a09cc0', margin: 0 }}>⎇ Version History</h2>
               <p style={{ fontSize: 11, color: '#55507a', marginTop: 2, marginBottom: 0 }}>Snapshots of your manuscript — powered by git</p>
             </div>
-            <GitPanel />
+            <GitPanel filterDocId={historyFilterDoc} onClearFilter={() => setHistoryFilterDoc(null)} />
           </div>
         ) : view === 'settings' ? (
           <SettingsView
             onToolbarChange={(n, f) => { setToolbarNormal(n); setToolbarFocus(f) }}
             onFormattingChange={(fmt) => setFormatting(fmt)}
             onTypographyChange={(t) => { setTypography(t); setTypographyVersion((v) => v + 1) }}
+            onFocusDimChange={(d) => setFocusDim(d)}
           />
         ) : activeId ? (
           <Editor
@@ -199,6 +216,7 @@ export default function App() {
             enabledFocus={toolbarFocus}
             formatting={formatting}
             typography={typography}
+            focusDim={focusDim}
             docMeta={docs.find((d) => d.id === activeId) ?? null}
             onMetaUpdate={async (fields) => {
               await window.api.docs.update(activeId, fields)

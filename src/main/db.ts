@@ -127,6 +127,12 @@ export function initDb(): void {
     typography_curly_quotes: '1',
     typography_em_dash: '0',
     typography_ellipsis: '1',
+    focus_dim_unit: 'paragraph',
+    focus_dim_step: '0.33',
+    focus_dim_min: '0.05',
+    github_repo: '',
+    github_pat: '',
+    github_branch: 'main',
   }
   const upsertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)')
   for (const [key, value] of Object.entries(defaultSettings)) {
