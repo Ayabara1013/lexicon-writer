@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+﻿import { useEffect, useRef, useState, useCallback } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -27,10 +27,11 @@ import {
   Zap, Search, ChevronDown,
   ArrowLeft, PanelBottom,
   ChevronUp, ChevronDown as ChevronDownIcon,
-  Replace,
+  Replace, GripVertical,
 } from 'lucide-react'
 import Typography from '@tiptap/extension-typography'
 import { SystemWindow } from '../extensions/SystemWindow'
+import { FocusDimExtension } from '../extensions/FocusDim'
 import type { WindowType } from '../extensions/SystemWindow'
 import SceneMetaBar from './SceneMetaBar'
 import { SlashCommand, SLASH_ITEMS } from '../extensions/SlashCommand'
@@ -127,12 +128,27 @@ export const DEFAULT_TYPOGRAPHY: TypographySettings = {
   ellipsis: true,
 }
 
+export type FocusDimUnit = 'paragraph' | 'sentence'
+
+export type FocusDimSettings = {
+  unit: FocusDimUnit
+  stepOpacity: number
+  minOpacity: number
+}
+
+export const DEFAULT_FOCUS_DIM: FocusDimSettings = {
+  unit: 'paragraph',
+  stepOpacity: 0.33,
+  minOpacity: 0.05,
+}
+
 type Props = {
   docId: string
   enabledNormal?: string[]
   enabledFocus?: string[]
   formatting?: EditorFormatting
   typography?: TypographySettings
+  focusDim?: FocusDimSettings
   onMetaUpdate?: (fields: { word_target?: number | null; pov?: string | null; location?: string | null; scene_status?: string | null }) => void
   docMeta?: import('../env').DocMeta | null
 }
@@ -155,9 +171,10 @@ function Divider() {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function Editor({ docId, enabledNormal, enabledFocus, formatting, typography, onMetaUpdate, docMeta }: Props) {
+export default function Editor({ docId, enabledNormal, enabledFocus, formatting, typography, focusDim, onMetaUpdate, docMeta }: Props) {
   const fmt = formatting ?? DEFAULT_FORMATTING
   const typo = typography ?? DEFAULT_TYPOGRAPHY
+  const dim = focusDim ?? DEFAULT_FOCUS_DIM
   const [loaded, setLoaded]               = useState(false)
   const [focusMode, setFocusMode]         = useState(false)
   const [focusToolbarOpen, setFocusToolbarOpen] = useState(false)
@@ -170,8 +187,6 @@ export default function Editor({ docId, enabledNormal, enabledFocus, formatting,
   const [replaceQuery, setReplaceQuery]   = useState('')
   const [matchCount, setMatchCount]       = useState(0)
   const [matchIndex, setMatchIndex]       = useState(-1)
-  const [dragHandleTop, setDragHandleTop] = useState<number | null>(null)
-  const [dragNodePos, setDragNodePos]     = useState<number | null>(null)
 
   const saveTimer      = useRef<ReturnType<typeof setTimeout> | null>(null)
   const systemMenuRef  = useRef<HTMLDivElement>(null)
@@ -179,6 +194,7 @@ export default function Editor({ docId, enabledNormal, enabledFocus, formatting,
   const linkPopupRef   = useRef<HTMLDivElement>(null)
   const findInputRef   = useRef<HTMLInputElement>(null)
   const scrollRef      = useRef<HTMLDivElement>(null)
+  const focusModeRef   = useRef(focusMode)
 
   const normalEnabled = enabledNormal ?? DEFAULT_NORMAL_IDS
   const focusEnabled  = enabledFocus  ?? DEFAULT_FOCUS_IDS
@@ -218,6 +234,7 @@ export default function Editor({ docId, enabledNormal, enabledFocus, formatting,
         plusMinus: false,
       }),
       SystemWindow,
+      FocusDimExtension,
       SlashCommand.configure({
         suggestion: {
           char: '/',
@@ -285,7 +302,12 @@ export default function Editor({ docId, enabledNormal, enabledFocus, formatting,
       }),
     ],
     editorProps: {
-      attributes: { class: 'prose prose-invert max-w-none focus:outline-none' }
+      attributes: { class: 'prose prose-invert max-w-none focus:outline-none' },
+      transformPastedHTML(html: string) {
+        return html
+          .replace(/\s*color\s*:\s*[^;}"']+;?/gi, '')
+          .replace(/\s*background(-color)?\s*:\s*[^;}"']+;?/gi, '')
+      },
     },
     onUpdate: ({ editor }) => {
       if (!loaded) return
@@ -323,7 +345,10 @@ export default function Editor({ docId, enabledNormal, enabledFocus, formatting,
     return () => window.removeEventListener('keydown', onKey)
   }, [findOpen, focusMode])
 
-  // ── Drag handle tracking ──────────────────────────────────────────────────
+  const [dragHandleTop, setDragHandleTop] = useState<number | null>(null)
+  const [dragNodePos, setDragNodePos]     = useState<number | null>(null)
+
+  // ── Drag handle — track hovered block and position handle beside it ────────
 
   useEffect(() => {
     const el = scrollRef.current
@@ -364,7 +389,35 @@ export default function Editor({ docId, enabledNormal, enabledFocus, formatting,
     e.dataTransfer.setData('text/plain', node.textContent || ' ')
   }
 
-  // Close popups on outside click
+  // ── Keep focusModeRef current so typewriter handler doesn't capture stale value ──
+  useEffect(() => { focusModeRef.current = focusMode }, [focusMode])
+
+  // ── Focus mode dimming — update extension storage when mode/settings change ──
+
+  useEffect(() => {
+    if (!editor) return
+    editor.storage.focusDim = { ...dim, enabled: focusMode }
+    editor.view.dispatch(editor.state.tr.setMeta('focusDim', true))
+  }, [focusMode, dim, editor])
+
+  // ── Typewriter scrolling — keep cursor at 45% of scroll container height ──
+
+  useEffect(() => {
+    if (!editor) return
+    function centerCursor() {
+      if (!focusModeRef.current || !scrollRef.current) return
+      try {
+        const coords = editor!.view.coordsAtPos(editor!.state.selection.from)
+        const scroll = scrollRef.current
+        const rect = scroll.getBoundingClientRect()
+        scroll.scrollTop += coords.top - (rect.top + rect.height * 0.45)
+      } catch {}
+    }
+    editor.on('selectionUpdate', centerCursor)
+    return () => { editor.off('selectionUpdate', centerCursor) }
+  }, [editor])
+
+  // ── Close popups on outside click
   useEffect(() => {
     function onDown(e: MouseEvent) {
       if (systemMenuRef.current && !systemMenuRef.current.contains(e.target as Node)) setSystemMenuOpen(false)
@@ -817,14 +870,14 @@ export default function Editor({ docId, enabledNormal, enabledFocus, formatting,
             onDragStart={handleDragStart}
             title="Drag to reorder"
             style={{
-              position: 'absolute', left: 8, top: dragHandleTop,
-              width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'grab', color: T.textMut, fontSize: 13, userSelect: 'none',
-              opacity: 0.4, zIndex: 10,
+              position: 'absolute', left: 6, top: dragHandleTop,
+              width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'grab', color: '#55507a', userSelect: 'none',
+              opacity: 0.35, zIndex: 10, transition: 'opacity 0.15s',
             }}
             onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.4')}
-          >⠿</div>
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.35')}
+          ><GripVertical size={14} /></div>
         )}
         <div style={{ maxWidth: focusMode ? 620 : 720, margin: '0 auto', padding: focusMode ? '64px 32px' : '48px 64px' }}>
           <EditorContent editor={editor} />
