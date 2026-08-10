@@ -4,13 +4,24 @@ import type { DocMeta } from '../env'
 type Props = {
   docs: DocMeta[]
   activeId: string | null
+  generatorActive: boolean
   onSelect: (id: string) => void
+  onOpenGenerator: () => void
   onCreate: (type: 'chapter' | 'note') => void
   onRename: (id: string, title: string) => void
   onDelete: (id: string) => void
 }
 
-export default function Sidebar({ docs, activeId, onSelect, onCreate, onRename, onDelete }: Props) {
+export default function Sidebar({
+  docs,
+  activeId,
+  generatorActive,
+  onSelect,
+  onOpenGenerator,
+  onCreate,
+  onRename,
+  onDelete
+}: Props) {
   const [tab, setTab] = useState<'chapter' | 'note'>('chapter')
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -31,6 +42,19 @@ export default function Sidebar({ docs, activeId, onSelect, onCreate, onRename, 
     <aside className="w-64 flex-shrink-0 flex flex-col bg-base-200 border-r border-base-300 h-full">
       <div className="p-4 border-b border-base-300">
         <h1 className="text-base-content font-semibold text-lg tracking-tight">Lexicon Writer</h1>
+      </div>
+
+      <div className="p-2 border-b border-base-300">
+        <button
+          onClick={onOpenGenerator}
+          className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+            generatorActive
+              ? 'bg-primary/20 text-primary'
+              : 'text-base-content/70 hover:bg-base-300 hover:text-base-content'
+          }`}
+        >
+          🎲 Character Generator
+        </button>
       </div>
 
       <div className="flex border-b border-base-300">
