@@ -93,5 +93,10 @@
   { "id": "orig-glasswrought", "name": "Glasswrought", "source": "Original", "tags": ["construct"], "description": "A body of fused sand and soul-glass — beautiful, translucent, and always one fall from ruin." },
   { "id": "orig-tidebound", "name": "Tidebound", "source": "Original", "tags": ["aquatic", "cursed"], "description": "Drowned once and returned, with strength that rises and falls with the moon." },
   { "id": "orig-sablefolk", "name": "Sablefolk", "source": "Original", "tags": ["shadow"], "description": "Their shadow moves a half-second early, and they've learned to watch it for warnings." },
-  { "id": "orig-hollowborn", "name": "Hollowborn", "source": "Original", "tags": ["spirit", "cursed"], "description": "Born without a name-soul; they must borrow, steal, or earn one before they fade." }
+  { "id": "orig-hollowborn", "name": "Hollowborn", "source": "Original", "tags": ["spirit", "cursed"], "description": "Born without a name-soul; they must borrow, steal, or earn one before they fade." },
+  { "id": "pf2-anadi", "name": "Anadi", "source": "Pathfinder 2e", "tags": ["spider", "shapechanger"], "description": "Spider-folk who spin between two shapes and never quite trust a stranger who arrived without a story to trade." },
+  { "id": "pf2-kholo", "name": "Kholo", "source": "Pathfinder 2e", "tags": ["hyena", "clan"], "description": "Hyena-kin bound to a clan's laughter-code, who judge a stranger's honesty by what actually makes them laugh." },
+  { "id": "pf2-vishkanya", "name": "Vishkanya", "source": "Pathfinder 2e", "tags": ["poison", "exiled"], "description": "Poison runs harmless in their own blood and lethal in a graze of skin, which keeps most handshakes deliberately short." },
+  { "id": "folk-kappa", "name": "Kappa", "source": "Folklore", "tags": ["spirit", "aquatic"], "description": "River-spirits with a water-filled hollow atop their skulls, murderously formal about a bow returned incorrectly." },
+  { "id": "folk-encantado", "name": "Encantado", "source": "Folklore", "tags": ["shapechanger", "aquatic"], "description": "River-dolphin shapeshifters who slip ashore for one dance and vanish before the music decides who they really were." }
 ]

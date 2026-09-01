@@ -91,5 +91,10 @@
   { "id": "job-dungeon-delver", "name": "Dungeon delver", "source": "Fantasy trade", "category": "roguish", "description": "Professional grave-of-empires tourist, with a checklist and a rope budget." },
   { "id": "job-wandering-priest", "name": "Wandering priest", "source": "Fantasy trade", "category": "divine", "description": "No parish, no tithes — just a circuit of villages that expect them each spring." },
   { "id": "job-bog-diver", "name": "Bog diver", "source": "Fantasy trade", "category": "maritime", "description": "Salvages iron and bodies from peat water, and keeps what the bog gives up." },
-  { "id": "job-sky-whaler", "name": "Sky-whaler", "source": "Fantasy trade", "category": "maritime", "description": "Hunts cloud-leviathans from a harpoon deck, on shares rather than wages." }
+  { "id": "job-sky-whaler", "name": "Sky-whaler", "source": "Fantasy trade", "category": "maritime", "description": "Hunts cloud-leviathans from a harpoon deck, on shares rather than wages." },
+  { "id": "job-camp-medic", "name": "Camp medic", "source": "Mundane", "category": "medical", "description": "Patches soldiers between skirmishes, and keeps a running mental tally of whose luck is about to run out." },
+  { "id": "job-hospice-keeper", "name": "Hospice keeper", "source": "Mundane", "category": "medical", "description": "Sits with the dying so they don't have to do it alone, and has heard every kind of last word there is." },
+  { "id": "job-herald", "name": "Herald", "source": "Mundane", "category": "courtly", "description": "Announces titles and reads decrees aloud, and privately corrects the pronunciation everyone else gets wrong." },
+  { "id": "job-oath-witness", "name": "Oath-witness", "source": "Fantasy trade", "category": "courtly", "description": "Presides over oaths sworn at court, and the binding magic remembers every clause better than the swearer does." },
+  { "id": "job-stormsinger", "name": "Stormsinger", "source": "Fantasy trade", "category": "elemental", "description": "Sings weather into shifting, a verse per gust, and blames any silence on an audience that didn't believe hard enough." }
 ]
