@@ -98,5 +98,10 @@
   { "id": "pf2-kholo", "name": "Kholo", "source": "Pathfinder 2e", "tags": ["hyena", "clan"], "description": "Hyena-kin bound to a clan's laughter-code, who judge a stranger's honesty by what actually makes them laugh." },
   { "id": "pf2-vishkanya", "name": "Vishkanya", "source": "Pathfinder 2e", "tags": ["poison", "exiled"], "description": "Poison runs harmless in their own blood and lethal in a graze of skin, which keeps most handshakes deliberately short." },
   { "id": "folk-kappa", "name": "Kappa", "source": "Folklore", "tags": ["spirit", "aquatic"], "description": "River-spirits with a water-filled hollow atop their skulls, murderously formal about a bow returned incorrectly." },
-  { "id": "folk-encantado", "name": "Encantado", "source": "Folklore", "tags": ["shapechanger", "aquatic"], "description": "River-dolphin shapeshifters who slip ashore for one dance and vanish before the music decides who they really were." }
+  { "id": "folk-encantado", "name": "Encantado", "source": "Folklore", "tags": ["shapechanger", "aquatic"], "description": "River-dolphin shapeshifters who slip ashore for one dance and vanish before the music decides who they really were." },
+  { "id": "pf2-goloma", "name": "Goloma", "source": "Pathfinder 2e", "tags": ["beastfolk", "subterranean"], "description": "Blind, four-armed cave-dwellers who read a room by the shape sound makes bouncing off it." },
+  { "id": "pf2-shisk", "name": "Shisk", "source": "Pathfinder 2e", "tags": ["insectoid", "nocturnal"], "description": "Segmented night-hunters with a taste for silence, who consider daylight conversation a kind of rudeness." },
+  { "id": "folk-bunyip-touched", "name": "Bunyip-touched", "source": "Folklore", "tags": ["aquatic", "omen"], "description": "Marked by a childhood brush with the thing in the billabong, and treated ever after as a small walking warning." },
+  { "id": "folk-peri", "name": "Peri", "source": "Folklore", "tags": ["fey", "aerial"], "description": "Winged and exiled from a paradise they're still working off the debt to re-enter, one earned kindness at a time." },
+  { "id": "orig-echoborn", "name": "Echo-born", "source": "Original", "tags": ["spirit", "memory"], "description": "Formed from a moment loud enough to outlive itself; they carry a faint echo of it and flinch at loud silence." }
 ]

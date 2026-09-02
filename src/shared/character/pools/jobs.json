@@ -96,5 +96,10 @@
   { "id": "job-hospice-keeper", "name": "Hospice keeper", "source": "Mundane", "category": "medical", "description": "Sits with the dying so they don't have to do it alone, and has heard every kind of last word there is." },
   { "id": "job-herald", "name": "Herald", "source": "Mundane", "category": "courtly", "description": "Announces titles and reads decrees aloud, and privately corrects the pronunciation everyone else gets wrong." },
   { "id": "job-oath-witness", "name": "Oath-witness", "source": "Fantasy trade", "category": "courtly", "description": "Presides over oaths sworn at court, and the binding magic remembers every clause better than the swearer does." },
-  { "id": "job-stormsinger", "name": "Stormsinger", "source": "Fantasy trade", "category": "elemental", "description": "Sings weather into shifting, a verse per gust, and blames any silence on an audience that didn't believe hard enough." }
+  { "id": "job-stormsinger", "name": "Stormsinger", "source": "Fantasy trade", "category": "elemental", "description": "Sings weather into shifting, a verse per gust, and blames any silence on an audience that didn't believe hard enough." },
+  { "id": "job-totem-carver", "name": "Totem-carver", "source": "Fantasy trade", "category": "primal", "description": "Carves a spirit into wood well enough to wake it, and argues with the ones that turned out ornery." },
+  { "id": "job-rootbinder", "name": "Rootbinder", "source": "Fantasy trade", "category": "primal", "description": "Grows a hedge into a wall overnight for the right price, and never quite kills the thing it replaces." },
+  { "id": "job-forge-caller", "name": "Forge-caller", "source": "Fantasy trade", "category": "elemental", "description": "Coaxes elemental fire into a forge that shouldn't burn that hot, and never explains how the coaxing works." },
+  { "id": "job-seneschal", "name": "Seneschal", "source": "Mundane", "category": "courtly", "description": "Runs the household so the lord can be seen to run it, and keeps a private ledger of who actually did what." },
+  { "id": "job-miller", "name": "Miller", "source": "Mundane", "category": "civilian", "description": "Grinds the grain for the whole valley, and knows exactly whose harvest came up short this year." }
 ]
