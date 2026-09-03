@@ -101,5 +101,10 @@
   { "id": "job-rootbinder", "name": "Rootbinder", "source": "Fantasy trade", "category": "primal", "description": "Grows a hedge into a wall overnight for the right price, and never quite kills the thing it replaces." },
   { "id": "job-forge-caller", "name": "Forge-caller", "source": "Fantasy trade", "category": "elemental", "description": "Coaxes elemental fire into a forge that shouldn't burn that hot, and never explains how the coaxing works." },
   { "id": "job-seneschal", "name": "Seneschal", "source": "Mundane", "category": "courtly", "description": "Runs the household so the lord can be seen to run it, and keeps a private ledger of who actually did what." },
-  { "id": "job-miller", "name": "Miller", "source": "Mundane", "category": "civilian", "description": "Grinds the grain for the whole valley, and knows exactly whose harvest came up short this year." }
+  { "id": "job-miller", "name": "Miller", "source": "Mundane", "category": "civilian", "description": "Grinds the grain for the whole valley, and knows exactly whose harvest came up short this year." },
+  { "id": "job-tideturner", "name": "Tideturner", "source": "Fantasy trade", "category": "elemental", "description": "Talks a harbor's tide into arriving early for a price, and won't say what happens the day it doesn't listen." },
+  { "id": "job-cat-burglar", "name": "Cat burglar", "source": "Mundane", "category": "roguish", "description": "Works rooftops and skylights, and has strong professional opinions about anyone who still uses a crowbar." },
+  { "id": "job-firebreak-warden", "name": "Firebreak warden", "source": "Mundane", "category": "wilderness", "description": "Sets small fires on purpose to stop bigger ones, and is trusted by nobody until the summer proves them right." },
+  { "id": "job-grovekeeper", "name": "Grovekeeper", "source": "Mundane", "category": "primal", "description": "Tends a stand of trees older than any nearby town, and treats every request to cut one down as a personal insult." },
+  { "id": "job-beast-speaker", "name": "Beast-speaker", "source": "Fantasy trade", "category": "primal", "description": "Doesn't tame anything — just translates, for a fee, and never repeats what the horses actually think of their riders." }
 ]

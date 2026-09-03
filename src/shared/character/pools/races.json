@@ -103,5 +103,10 @@
   { "id": "pf2-shisk", "name": "Shisk", "source": "Pathfinder 2e", "tags": ["insectoid", "nocturnal"], "description": "Segmented night-hunters with a taste for silence, who consider daylight conversation a kind of rudeness." },
   { "id": "folk-bunyip-touched", "name": "Bunyip-touched", "source": "Folklore", "tags": ["aquatic", "omen"], "description": "Marked by a childhood brush with the thing in the billabong, and treated ever after as a small walking warning." },
   { "id": "folk-peri", "name": "Peri", "source": "Folklore", "tags": ["fey", "aerial"], "description": "Winged and exiled from a paradise they're still working off the debt to re-enter, one earned kindness at a time." },
-  { "id": "orig-echoborn", "name": "Echo-born", "source": "Original", "tags": ["spirit", "memory"], "description": "Formed from a moment loud enough to outlive itself; they carry a faint echo of it and flinch at loud silence." }
+  { "id": "orig-echoborn", "name": "Echo-born", "source": "Original", "tags": ["spirit", "memory"], "description": "Formed from a moment loud enough to outlive itself; they carry a faint echo of it and flinch at loud silence." },
+  { "id": "pf1-kasatha", "name": "Kasatha", "source": "Pathfinder 1e", "tags": ["desert", "nomad"], "description": "Four-armed desert nomads who read the stars like a ledger and never camp somewhere the sky can't be seen." },
+  { "id": "pf1-wyrwood", "name": "Wyrwood", "source": "Pathfinder 1e", "tags": ["construct", "plant"], "description": "A construct carved from living wood, still growing new rings and never quite sure which one it started as." },
+  { "id": "folk-nahual", "name": "Nahual", "source": "Folklore", "tags": ["shapechanger", "spirit"], "description": "Born bonded to an animal spirit under the same stars; harm one and you'll feel it happen to the other." },
+  { "id": "folk-rakshasa-kin", "name": "Rakshasa-kin", "source": "Folklore", "tags": ["shapechanger", "trickster"], "description": "Descendants of old shape-changing deceivers, welcomed at fewer tables than their manners would suggest they deserve." },
+  { "id": "orig-starveined", "name": "Starveined", "source": "Original", "tags": ["celestial", "cursed"], "description": "Born the night a star fell close enough to leave a thread of light under their skin, cold to the touch and faintly humming." }
 ]
