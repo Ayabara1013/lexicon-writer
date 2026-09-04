@@ -106,5 +106,10 @@
   { "id": "job-cat-burglar", "name": "Cat burglar", "source": "Mundane", "category": "roguish", "description": "Works rooftops and skylights, and has strong professional opinions about anyone who still uses a crowbar." },
   { "id": "job-firebreak-warden", "name": "Firebreak warden", "source": "Mundane", "category": "wilderness", "description": "Sets small fires on purpose to stop bigger ones, and is trusted by nobody until the summer proves them right." },
   { "id": "job-grovekeeper", "name": "Grovekeeper", "source": "Mundane", "category": "primal", "description": "Tends a stand of trees older than any nearby town, and treats every request to cut one down as a personal insult." },
-  { "id": "job-beast-speaker", "name": "Beast-speaker", "source": "Fantasy trade", "category": "primal", "description": "Doesn't tame anything — just translates, for a fee, and never repeats what the horses actually think of their riders." }
+  { "id": "job-beast-speaker", "name": "Beast-speaker", "source": "Fantasy trade", "category": "primal", "description": "Doesn't tame anything — just translates, for a fee, and never repeats what the horses actually think of their riders." },
+  { "id": "job-levinsmith", "name": "Levinsmith", "source": "Fantasy trade", "category": "elemental", "description": "Forges tools with lightning caught in a jar, and has scars in a pattern only other levinsmiths recognise." },
+  { "id": "job-frostwarden", "name": "Frostwarden", "source": "Fantasy trade", "category": "elemental", "description": "Keeps a pass frozen solid through a thaw for the right coin, and never explains how long that costs them personally." },
+  { "id": "job-safecracker", "name": "Safecracker", "source": "Mundane", "category": "roguish", "description": "Listens to tumblers for a living, and has strong opinions about locksmiths who make the job too easy." },
+  { "id": "job-trail-guide", "name": "Trail guide", "source": "Mundane", "category": "wilderness", "description": "Leads travellers through country that eats travellers, and quietly triples the fee for anyone who ignored the first warning." },
+  { "id": "job-wound-witch", "name": "Wound-witch", "source": "Fantasy trade", "category": "medical", "description": "Stitches a wound with one hand and mutters a ward with the other, and insists only one of those actually matters." }
 ]
