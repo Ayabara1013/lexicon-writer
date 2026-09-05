@@ -113,5 +113,10 @@
   { "id": "pf1-wyvaran", "name": "Wyvaran", "source": "Pathfinder 1e", "tags": ["draconic", "feral"], "description": "Draconic blood a few generations back, and the temper skipped none of those generations to reach them." },
   { "id": "folk-anansi-kin", "name": "Anansi-kin", "source": "Folklore", "tags": ["trickster", "spirit"], "description": "Descended from the spider who out-thought every god in the old stories, and expected to out-think a few problems themselves." },
   { "id": "folk-aziza", "name": "Aziza", "source": "Folklore", "tags": ["fey", "forest"], "description": "Tiny forest-dwellers said to teach magic to hunters who earn it, and famously stingy with anyone who tries to skip the earning." },
-  { "id": "orig-yearlent", "name": "Year-lent", "source": "Original", "tags": ["cursed", "mortal"], "description": "Alive on years their village voted to lend them; they know exactly how many are left and never mention the number." }
+  { "id": "orig-yearlent", "name": "Year-lent", "source": "Original", "tags": ["cursed", "mortal"], "description": "Alive on years their village voted to lend them; they know exactly how many are left and never mention the number." },
+  { "id": "orig-wordbound", "name": "Wordbound", "source": "Original", "tags": ["cursed", "spirit"], "description": "Every lie they tell surfaces as a new mark on their skin, and they've stopped wearing short sleeves in most towns." },
+  { "id": "orig-timeskipped", "name": "Timeskipped", "source": "Original", "tags": ["cursed", "mystery"], "description": "Occasionally lose months or years between one sleep and the next, and have learned to always ask what year it is first." },
+  { "id": "orig-resonant", "name": "Resonant", "source": "Original", "tags": ["spirit", "empath"], "description": "Hums faintly with whatever a nearby crowd is feeling, and has learned to leave a room before a riot does." },
+  { "id": "folk-baku", "name": "Baku", "source": "Folklore", "tags": ["spirit", "dream"], "description": "Eats nightmares on request, and charges only in a very specific and easily forgotten kind of favour." },
+  { "id": "folk-menehune", "name": "Menehune", "source": "Folklore", "tags": ["fey", "artisan"], "description": "Small forest-builders who finish a wall overnight and vanish before sunrise, on the condition nobody watches them work." }
 ]

@@ -111,5 +111,10 @@
   { "id": "job-frostwarden", "name": "Frostwarden", "source": "Fantasy trade", "category": "elemental", "description": "Keeps a pass frozen solid through a thaw for the right coin, and never explains how long that costs them personally." },
   { "id": "job-safecracker", "name": "Safecracker", "source": "Mundane", "category": "roguish", "description": "Listens to tumblers for a living, and has strong opinions about locksmiths who make the job too easy." },
   { "id": "job-trail-guide", "name": "Trail guide", "source": "Mundane", "category": "wilderness", "description": "Leads travellers through country that eats travellers, and quietly triples the fee for anyone who ignored the first warning." },
-  { "id": "job-wound-witch", "name": "Wound-witch", "source": "Fantasy trade", "category": "medical", "description": "Stitches a wound with one hand and mutters a ward with the other, and insists only one of those actually matters." }
+  { "id": "job-wound-witch", "name": "Wound-witch", "source": "Fantasy trade", "category": "medical", "description": "Stitches a wound with one hand and mutters a ward with the other, and insists only one of those actually matters." },
+  { "id": "job-cupbearer", "name": "Cupbearer", "source": "Mundane", "category": "courtly", "description": "Tastes the wine before the lord does, and has strong private opinions about vintage nobody asked for." },
+  { "id": "job-court-illusionist", "name": "Court illusionist", "source": "Fantasy trade", "category": "courtly", "description": "Turns the feast hall into a starfield for an hour, and never lets on how much of the magic is just clever mirrors." },
+  { "id": "job-harbourmaster", "name": "Harbourmaster", "source": "Mundane", "category": "maritime", "description": "Decides who docks and who waits, and has never once let a bribe change the order of the tide." },
+  { "id": "job-bestiary-illustrator", "name": "Bestiary illustrator", "source": "Fantasy trade", "category": "scholarly", "description": "Sketches monsters from just close enough to get the details right, and has the scars to prove the distance was wrong twice." },
+  { "id": "job-temple-caretaker", "name": "Temple caretaker", "source": "Mundane", "category": "divine", "description": "Sweeps the altar, trims the candles, and has outlasted three high priests without ever wanting the job themselves." }
 ]
