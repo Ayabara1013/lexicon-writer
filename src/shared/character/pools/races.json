@@ -118,5 +118,10 @@
   { "id": "orig-timeskipped", "name": "Timeskipped", "source": "Original", "tags": ["cursed", "mystery"], "description": "Occasionally lose months or years between one sleep and the next, and have learned to always ask what year it is first." },
   { "id": "orig-resonant", "name": "Resonant", "source": "Original", "tags": ["spirit", "empath"], "description": "Hums faintly with whatever a nearby crowd is feeling, and has learned to leave a room before a riot does." },
   { "id": "folk-baku", "name": "Baku", "source": "Folklore", "tags": ["spirit", "dream"], "description": "Eats nightmares on request, and charges only in a very specific and easily forgotten kind of favour." },
-  { "id": "folk-menehune", "name": "Menehune", "source": "Folklore", "tags": ["fey", "artisan"], "description": "Small forest-builders who finish a wall overnight and vanish before sunrise, on the condition nobody watches them work." }
+  { "id": "folk-menehune", "name": "Menehune", "source": "Folklore", "tags": ["fey", "artisan"], "description": "Small forest-builders who finish a wall overnight and vanish before sunrise, on the condition nobody watches them work." },
+  { "id": "pf2-sarangay", "name": "Sarangay", "source": "Pathfinder 2e", "tags": ["giant", "guardian"], "description": "Ox-headed giant-kin who measure a season by the health of the nearest harvest, and take a poor one personally." },
+  { "id": "pf1-duskwalker", "name": "Duskwalker", "source": "Pathfinder 1e", "tags": ["planar", "divine"], "description": "Descended from a god who died and came back changed; they hear an echo of that change and try to live up to it." },
+  { "id": "folk-yeti-kin", "name": "Yeti-kin", "source": "Folklore", "tags": ["mountain", "omen"], "description": "Mountain-born and cold to the touch, blamed for every avalanche within a day's walk whether they were there or not." },
+  { "id": "folk-impundulu", "name": "Impundulu", "source": "Folklore", "tags": ["spirit", "storm"], "description": "Lightning-bird descendants who taste faintly of ozone before a storm, and are blamed for every roof that burns that week." },
+  { "id": "orig-cornerbound", "name": "Cornerbound", "source": "Original", "tags": ["bound", "spirit"], "description": "Sealed a piece of themselves into a building's foundation at its raising, and feel every crack in it as their own." }
 ]
