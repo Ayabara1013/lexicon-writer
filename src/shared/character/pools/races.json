@@ -123,5 +123,10 @@
   { "id": "pf1-duskwalker", "name": "Duskwalker", "source": "Pathfinder 1e", "tags": ["planar", "divine"], "description": "Descended from a god who died and came back changed; they hear an echo of that change and try to live up to it." },
   { "id": "folk-yeti-kin", "name": "Yeti-kin", "source": "Folklore", "tags": ["mountain", "omen"], "description": "Mountain-born and cold to the touch, blamed for every avalanche within a day's walk whether they were there or not." },
   { "id": "folk-impundulu", "name": "Impundulu", "source": "Folklore", "tags": ["spirit", "storm"], "description": "Lightning-bird descendants who taste faintly of ozone before a storm, and are blamed for every roof that burns that week." },
-  { "id": "orig-cornerbound", "name": "Cornerbound", "source": "Original", "tags": ["bound", "spirit"], "description": "Sealed a piece of themselves into a building's foundation at its raising, and feel every crack in it as their own." }
+  { "id": "orig-cornerbound", "name": "Cornerbound", "source": "Original", "tags": ["bound", "spirit"], "description": "Sealed a piece of themselves into a building's foundation at its raising, and feel every crack in it as their own." },
+  { "id": "pf2-awakened-animal", "name": "Awakened Animal", "source": "Pathfinder 2e", "tags": ["beastfolk", "sapient"], "description": "Once ordinary livestock or vermin, until the day they woke up mid-thought and never stopped being surprised by it." },
+  { "id": "pf2-shoony", "name": "Shoony", "source": "Pathfinder 2e", "tags": ["beastfolk", "trade"], "description": "Dog-folk caravaners who remember every debt and every kindness with the same unnerving accuracy." },
+  { "id": "pf1-grioth", "name": "Grioth", "source": "Pathfinder 1e", "tags": ["void", "psionic"], "description": "Void-touched and telepathic, uneasy on solid ground and homesick for a sky most people can't see the far side of." },
+  { "id": "pf1-trox", "name": "Trox", "source": "Pathfinder 1e", "tags": ["insectoid", "martial"], "description": "Beetle-folk mercenaries who measure trust in scars and consider a shed carapace worth grieving." },
+  { "id": "folk-adze", "name": "Adze", "source": "Folklore", "tags": ["spirit", "shapechanger"], "description": "Takes the shape of a firefly to slip through a crack in the wall, and always closes the door properly on the way back out." }
 ]

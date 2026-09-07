@@ -121,5 +121,10 @@
   { "id": "job-escape-artist", "name": "Escape artist", "source": "Mundane", "category": "roguish", "description": "Performs the trick nightly for coin, and has quietly used the real version twice when the crowd wasn't paying." },
   { "id": "job-migration-warden", "name": "Migration warden", "source": "Fantasy trade", "category": "wilderness", "description": "Redirects a migrating herd of something large around a village every year, and refuses to say what happens if they're late." },
   { "id": "job-weather-reader", "name": "Weather-reader", "source": "Mundane", "category": "primal", "description": "Reads moss, birds, and joint aches to call the weather a day out, and is wrong just often enough to stay humble." },
-  { "id": "job-relic-thief", "name": "Relic thief", "source": "Fantasy trade", "category": "criminal", "description": "Steals cursed things to order, and has a strict no-refunds policy once the curse activates." }
+  { "id": "job-relic-thief", "name": "Relic thief", "source": "Fantasy trade", "category": "criminal", "description": "Steals cursed things to order, and has a strict no-refunds policy once the curse activates." },
+  { "id": "job-quarantine-warden", "name": "Quarantine warden", "source": "Fantasy trade", "category": "medical", "description": "Wards the line around a sick house and enforces it, which makes them the only visitor half the town still trusts." },
+  { "id": "job-bonesetter", "name": "Bonesetter", "source": "Mundane", "category": "medical", "description": "Resets a break by feel alone, and won't take payment until the patient can stand on it unaided." },
+  { "id": "job-translator", "name": "Translator", "source": "Mundane", "category": "scholarly", "description": "Fluent in six languages and diplomatic in none of them, which has started more wars than it's ended." },
+  { "id": "job-exorcist", "name": "Exorcist", "source": "Fantasy trade", "category": "divine", "description": "Talks spirits out of houses for a fee, and has started keeping a tally of the ones that talked back too fluently." },
+  { "id": "job-sea-charmer", "name": "Sea-charmer", "source": "Fantasy trade", "category": "maritime", "description": "Sings a ship's wake calm through open water, and refuses every request to do the same for a fight." }
 ]
