@@ -128,5 +128,10 @@
   { "id": "pf2-shoony", "name": "Shoony", "source": "Pathfinder 2e", "tags": ["beastfolk", "trade"], "description": "Dog-folk caravaners who remember every debt and every kindness with the same unnerving accuracy." },
   { "id": "pf1-grioth", "name": "Grioth", "source": "Pathfinder 1e", "tags": ["void", "psionic"], "description": "Void-touched and telepathic, uneasy on solid ground and homesick for a sky most people can't see the far side of." },
   { "id": "pf1-trox", "name": "Trox", "source": "Pathfinder 1e", "tags": ["insectoid", "martial"], "description": "Beetle-folk mercenaries who measure trust in scars and consider a shed carapace worth grieving." },
-  { "id": "folk-adze", "name": "Adze", "source": "Folklore", "tags": ["spirit", "shapechanger"], "description": "Takes the shape of a firefly to slip through a crack in the wall, and always closes the door properly on the way back out." }
+  { "id": "folk-adze", "name": "Adze", "source": "Folklore", "tags": ["spirit", "shapechanger"], "description": "Takes the shape of a firefly to slip through a crack in the wall, and always closes the door properly on the way back out." },
+  { "id": "orig-saltkin", "name": "Saltkin", "source": "Original", "tags": ["body", "trade"], "description": "Their sweat crystallises into salt overnight, which made them useful long before anyone asked if they minded." },
+  { "id": "orig-nullborn", "name": "Nullborn", "source": "Original", "tags": ["magic", "immune"], "description": "Illusions slide off them untouched, which makes them excellent witnesses and terrible company at a magic show." },
+  { "id": "folk-penanggalan", "name": "Penanggalan", "source": "Folklore", "tags": ["undead", "shapechanger"], "description": "Detaches at the neck by night and flies trailing everything else; mornings are, understandably, a private affair." },
+  { "id": "folk-duende", "name": "Duende", "source": "Folklore", "tags": ["fey", "trickster"], "description": "A house-imp who hides one shoe, one earring, one important letter — never more than one thing at a time." },
+  { "id": "pf1-wayang", "name": "Wayang", "source": "Pathfinder 1e", "tags": ["shadow", "planar"], "description": "Small and quiet, born of the Shadow Plane, and unnerving to stand near in bright noon light for reasons nobody quite names." }
 ]

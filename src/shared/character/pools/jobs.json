@@ -126,5 +126,10 @@
   { "id": "job-bonesetter", "name": "Bonesetter", "source": "Mundane", "category": "medical", "description": "Resets a break by feel alone, and won't take payment until the patient can stand on it unaided." },
   { "id": "job-translator", "name": "Translator", "source": "Mundane", "category": "scholarly", "description": "Fluent in six languages and diplomatic in none of them, which has started more wars than it's ended." },
   { "id": "job-exorcist", "name": "Exorcist", "source": "Fantasy trade", "category": "divine", "description": "Talks spirits out of houses for a fee, and has started keeping a tally of the ones that talked back too fluently." },
-  { "id": "job-sea-charmer", "name": "Sea-charmer", "source": "Fantasy trade", "category": "maritime", "description": "Sings a ship's wake calm through open water, and refuses every request to do the same for a fight." }
+  { "id": "job-sea-charmer", "name": "Sea-charmer", "source": "Fantasy trade", "category": "maritime", "description": "Sings a ship's wake calm through open water, and refuses every request to do the same for a fight." },
+  { "id": "job-flamewarden", "name": "Flamewarden", "source": "Fantasy trade", "category": "elemental", "description": "Keeps a village's eternal flame lit through every storm, and has never once explained what happens if it goes out." },
+  { "id": "job-regalia-keeper", "name": "Regalia keeper", "source": "Fantasy trade", "category": "courtly", "description": "Polishes a crown that hums faintly when the wrong head tries it on, and has never said so to the current wearer." },
+  { "id": "job-lookout", "name": "Lookout", "source": "Mundane", "category": "roguish", "description": "Whistles three notes for trouble and one for all-clear, and has never once been the one who got caught." },
+  { "id": "job-swamp-warden", "name": "Swamp-warden", "source": "Fantasy trade", "category": "wilderness", "description": "Knows which three steps in the bog are solid and charges accordingly for the fourth one nobody else survives guessing." },
+  { "id": "job-beast-midwife", "name": "Beast-midwife", "source": "Mundane", "category": "primal", "description": "Called out at all hours for difficult births, human or otherwise, and has strong opinions about which are worse." }
 ]
