@@ -131,5 +131,10 @@
   { "id": "job-regalia-keeper", "name": "Regalia keeper", "source": "Fantasy trade", "category": "courtly", "description": "Polishes a crown that hums faintly when the wrong head tries it on, and has never said so to the current wearer." },
   { "id": "job-lookout", "name": "Lookout", "source": "Mundane", "category": "roguish", "description": "Whistles three notes for trouble and one for all-clear, and has never once been the one who got caught." },
   { "id": "job-swamp-warden", "name": "Swamp-warden", "source": "Fantasy trade", "category": "wilderness", "description": "Knows which three steps in the bog are solid and charges accordingly for the fourth one nobody else survives guessing." },
-  { "id": "job-beast-midwife", "name": "Beast-midwife", "source": "Mundane", "category": "primal", "description": "Called out at all hours for difficult births, human or otherwise, and has strong opinions about which are worse." }
+  { "id": "job-beast-midwife", "name": "Beast-midwife", "source": "Mundane", "category": "primal", "description": "Called out at all hours for difficult births, human or otherwise, and has strong opinions about which are worse." },
+  { "id": "job-genealogist", "name": "Genealogist", "source": "Mundane", "category": "scholarly", "description": "Traces bloodlines for inheritance disputes, and has learned more secrets than any priest ever will." },
+  { "id": "job-bell-ringer", "name": "Bell-ringer", "source": "Mundane", "category": "divine", "description": "Rings the temple bell for every service, funeral, and fire, and can tell which one is coming by the crowd's pace outside." },
+  { "id": "job-soulmender", "name": "Soulmender", "source": "Fantasy trade", "category": "medical", "description": "Patches the cracks a bad fright or a worse memory leaves behind, and always asks permission before looking too closely." },
+  { "id": "job-curse-peddler", "name": "Curse peddler", "source": "Fantasy trade", "category": "criminal", "description": "Sells small curses to order — a stubbed toe, a burnt dinner — and insists the big ones aren't worth the karma." },
+  { "id": "job-lighthouse-keeper", "name": "Lighthouse keeper", "source": "Mundane", "category": "maritime", "description": "Trims the wick every night for ships that will never know their name, and counts a quiet winter as a good one." }
 ]
