@@ -146,5 +146,10 @@
   { "id": "job-leech-gatherer", "name": "Leech-gatherer", "source": "Mundane", "category": "medical", "description": "Wades the shallows barelegged to harvest medicine, and has strong opinions about which physicians waste the good ones." },
   { "id": "job-miracle-verifier", "name": "Miracle verifier", "source": "Fantasy trade", "category": "divine", "description": "Travels from town to town confirming or debunking miracles for the church, and has seen more of the fake ones hold up." },
   { "id": "job-cipher-breaker", "name": "Cipher-breaker", "source": "Mundane", "category": "scholarly", "description": "Breaks codes for the crown's correspondence, and reads everyone else's letters purely out of habit now." },
-  { "id": "job-poacher", "name": "Poacher", "source": "Mundane", "category": "criminal", "description": "Knows the lord's forest better than the gamekeeper does, and has never once been caught with anything provable." }
+  { "id": "job-poacher", "name": "Poacher", "source": "Mundane", "category": "criminal", "description": "Knows the lord's forest better than the gamekeeper does, and has never once been caught with anything provable." },
+  { "id": "job-diplomatic-aide", "name": "Diplomatic aide", "source": "Mundane", "category": "courtly", "description": "Drafts the polite version of every furious letter a noble wants to send, and quietly keeps the original." },
+  { "id": "job-trapsmith", "name": "Trapsmith", "source": "Fantasy trade", "category": "roguish", "description": "Builds the trap and sells the bypass separately, to different clients, and has never once seen the conflict of interest." },
+  { "id": "job-snow-tracker", "name": "Snow-tracker", "source": "Mundane", "category": "wilderness", "description": "Reads a trail in fresh snow like handwriting, and charges double once the trail starts looking recent." },
+  { "id": "job-fungal-warden", "name": "Fungal warden", "source": "Fantasy trade", "category": "primal", "description": "Tends a forest's underground fungus network like a garden, and can tell you what's dying three valleys over before anyone walks there." },
+  { "id": "job-net-mender", "name": "Net-mender", "source": "Mundane", "category": "maritime", "description": "Mends nets by lamplight after the boats come in, and can tell whose catch was light by the tears in the mesh." }
 ]
