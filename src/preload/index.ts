@@ -23,13 +23,13 @@ const api = {
     getDefault: () => ipcRenderer.invoke('canvas:getDefault'),
     listNodes: (canvasId: string) => ipcRenderer.invoke('canvas:listNodes', canvasId),
     listEdges: (canvasId: string) => ipcRenderer.invoke('canvas:listEdges', canvasId),
-    createNode: (canvasId: string, label: string, type: 'skill' | 'note' | 'group', posX: number, posY: number, color?: string, linkedDocId?: string, parentId?: string, width?: number, height?: number, groupId?: string) =>
-      ipcRenderer.invoke('canvas:createNode', canvasId, label, type, posX, posY, color, linkedDocId, parentId, width, height, groupId),
+    createNode: (canvasId: string, init: object) => ipcRenderer.invoke('canvas:createNode', canvasId, init),
     updateNode: (id: string, fields: object) => ipcRenderer.invoke('canvas:updateNode', id, fields),
+    updatePositions: (positions: object[]) => ipcRenderer.invoke('canvas:updatePositions', positions),
     deleteNode: (id: string) => ipcRenderer.invoke('canvas:deleteNode', id),
     restoreSnapshot: (canvasId: string, nodes: object[], edges: object[]) => ipcRenderer.invoke('canvas:restoreSnapshot', canvasId, nodes, edges),
-    createEdge: (fromId: string, toId: string, color?: string) => ipcRenderer.invoke('canvas:createEdge', fromId, toId, color),
-    updateEdge: (id: string, fields: { color?: string | null; label?: string | null }) => ipcRenderer.invoke('canvas:updateEdge', id, fields),
+    createEdge: (fromId: string, toId: string, color?: string | null, kind?: string) => ipcRenderer.invoke('canvas:createEdge', fromId, toId, color, kind),
+    updateEdge: (id: string, fields: object) => ipcRenderer.invoke('canvas:updateEdge', id, fields),
     deleteEdge: (id: string) => ipcRenderer.invoke('canvas:deleteEdge', id)
   },
   git: {

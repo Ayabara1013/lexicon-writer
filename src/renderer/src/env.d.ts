@@ -16,35 +16,11 @@ export type ChangedFile = { path: string; title: string; status: 'new' | 'modifi
 export type ChangesResult = { files: ChangedFile[]; diff: ParsedDiff }
 export type DocHistory = { docTitle: string; commits: GitCommit[] }
 
-export type Canvas = { id: string; title: string; created_at: number }
-
-export type CanvasNode = {
-  id: string
-  canvas_id: string
-  label: string
-  type: 'skill' | 'note' | 'group'
-  color: string | null
-  linked_doc_id: string | null
-  pos_x: number
-  pos_y: number
-  parent_id: string | null
-  group_id: string | null
-  collapsed: number  // 0 | 1
-  icon: string | null
-  shape: string
-  width: number | null
-  height: number | null
-}
-
-export type CanvasEdge = {
-  id: string
-  from_id: string
-  to_id: string
-  color: string | null
-  label: string | null
-  animated: number  // 0 | 1
-  edge_style: string  // 'straight' | 'bezier' | 'step'
-}
+export type {
+  Canvas, CanvasNode, CanvasEdge, CanvasNodeType, TalentType, NodeShape, NodeRequirement, EdgeKind,
+  CanvasNodeInit, CanvasNodeFields, CanvasEdgeFields, NodePosition,
+} from '@shared/types'
+import type { Canvas, CanvasNode, CanvasEdge, CanvasNodeInit, CanvasNodeFields, CanvasEdgeFields, EdgeKind, NodePosition } from '@shared/types'
 
 declare global {
   interface Window {
@@ -70,12 +46,13 @@ declare global {
         getDefault: () => Promise<string>
         listNodes: (canvasId: string) => Promise<CanvasNode[]>
         listEdges: (canvasId: string) => Promise<CanvasEdge[]>
-        createNode: (canvasId: string, label: string, type: 'skill' | 'note' | 'group', posX: number, posY: number, color?: string, linkedDocId?: string, parentId?: string, width?: number, height?: number, groupId?: string) => Promise<CanvasNode>
-        updateNode: (id: string, fields: Partial<Omit<CanvasNode, 'id' | 'canvas_id'>>) => Promise<boolean>
+        createNode: (canvasId: string, init: CanvasNodeInit) => Promise<CanvasNode>
+        updateNode: (id: string, fields: CanvasNodeFields) => Promise<boolean>
+        updatePositions: (positions: NodePosition[]) => Promise<boolean>
         deleteNode: (id: string) => Promise<boolean>
         restoreSnapshot: (canvasId: string, nodes: CanvasNode[], edges: CanvasEdge[]) => Promise<boolean>
-        createEdge: (fromId: string, toId: string, color?: string) => Promise<CanvasEdge>
-        updateEdge: (id: string, fields: { color?: string | null; label?: string | null; animated?: number; edge_style?: string }) => Promise<boolean>
+        createEdge: (fromId: string, toId: string, color?: string | null, kind?: EdgeKind) => Promise<CanvasEdge>
+        updateEdge: (id: string, fields: CanvasEdgeFields) => Promise<boolean>
         deleteEdge: (id: string) => Promise<boolean>
       }
       git: {

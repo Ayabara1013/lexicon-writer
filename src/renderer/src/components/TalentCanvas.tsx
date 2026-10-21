@@ -10,7 +10,8 @@ import {
 } from '@xyflow/react'
 import { toPng } from 'html-to-image'
 import '@xyflow/react/dist/style.css'
-import type { Canvas, CanvasNode, CanvasEdge, DocMeta } from '../env'
+import type { Canvas, CanvasNode, CanvasEdge, CanvasNodeType, NodeShape, DocMeta } from '../env'
+import { isTalent } from '../talent/model'
 import TalentNode from './TalentNode'
 import FloatingEdge from './FloatingEdge'
 import CanvasInspector from './CanvasInspector'
@@ -316,11 +317,11 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
     const from = dbNodes.find((n) => n.id === connection.source)
     const to = dbNodes.find((n) => n.id === connection.target)
     const edgeColor = to?.color ?? from?.color
+    // Linking is not parenting — sub-nodes are created explicitly (drag to empty space / Tab)
+    const kind = from && to && isTalent(from) && isTalent(to) ? 'prereq' : 'related'
     pushSnapshot()
-    window.api.canvas.createEdge(connection.source, connection.target, edgeColor).then((newEdge) => {
+    window.api.canvas.createEdge(connection.source, connection.target, edgeColor, kind).then((newEdge) => {
       setDbEdges((prev) => [...prev, newEdge])
-      window.api.canvas.updateNode(connection.target!, { parent_id: connection.source })
-      setDbNodes((prev) => prev.map((n) => n.id === connection.target ? { ...n, parent_id: connection.source } : n))
     })
   }, [dbNodes])
 
@@ -331,12 +332,14 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
     if (clientX == null || clientY == null) return
     const pos = screenToFlowPosition({ x: clientX, y: clientY })
     const sourceId = state.fromNode.id
-    const color = dbNodes.find((n) => n.id === sourceId)?.color ?? undefined
+    const source = dbNodes.find((n) => n.id === sourceId)
+    const color = source?.color ?? undefined
+    const type = source && isTalent(source) ? source.type : 'skill'
     pushSnapshot()
-    window.api.canvas.createNode(canvasId, 'New Node', 'skill', pos.x - 40, pos.y - 40, color, undefined, sourceId)
+    window.api.canvas.createNode(canvasId, { label: 'New Node', type, pos_x: pos.x - 40, pos_y: pos.y - 40, color, parent_id: sourceId })
       .then(async (newNode) => {
         setDbNodes((prev) => [...prev, newNode])
-        const newEdge = await window.api.canvas.createEdge(sourceId, newNode.id, color)
+        const newEdge = await window.api.canvas.createEdge(sourceId, newNode.id, color, isTalent(newNode) ? 'prereq' : 'related')
         setDbEdges((prev) => [...prev, newEdge])
         setEditingNodeId(newNode.id); setEditingLabel(newNode.label)
       })
@@ -357,48 +360,62 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
     return { x: clientX - rect.left, y: clientY - rect.top, clientX, clientY, nodeId, edgeId }
   }, [])
 
-  const onPaneContextMenu = useCallback((e: React.MouseEvent) => { e.preventDefault(); setContextMenu(buildMenu(e.clientX, e.clientY)); setInspectorNodeId(null); setInspectorEdgeId(null) }, [buildMenu])
+  const onPaneContextMenu = useCallback((e: React.MouseEvent | MouseEvent) => { e.preventDefault(); setContextMenu(buildMenu(e.clientX, e.clientY)); setInspectorNodeId(null); setInspectorEdgeId(null) }, [buildMenu])
   const onNodeContextMenu: NodeMouseHandler = useCallback((e, node) => { e.preventDefault(); setContextMenu(buildMenu(e.clientX, e.clientY, node.id)) }, [buildMenu])
   const onEdgeContextMenu: EdgeMouseHandler = useCallback((e, edge) => { e.preventDefault(); setContextMenu(buildMenu(e.clientX, e.clientY, undefined, edge.id)) }, [buildMenu])
   const closeMenu = useCallback(() => setContextMenu(null), [])
 
   // ── Node mutations ─────────────────────────────────────────────────────
 
-  async function addNode(type: 'skill' | 'note' | 'group', color?: string, clientX?: number, clientY?: number) {
+  async function addNode(type: CanvasNodeType, color?: string, clientX?: number, clientY?: number) {
     if (!canvasId) return
     const cx = clientX ?? contextMenu?.clientX; const cy = clientY ?? contextMenu?.clientY
     if (cx == null || cy == null) return
     const pos = screenToFlowPosition({ x: cx, y: cy })
     pushSnapshot()
     const isGroup = type === 'group'
-    const newNode = await window.api.canvas.createNode(
-      canvasId,
-      isGroup ? 'New Group' : type === 'skill' ? 'New Node' : 'New Note',
+    const newNode = await window.api.canvas.createNode(canvasId, {
+      label: isGroup ? 'New Group' : type === 'note' ? 'New Note' : 'New Node',
       type,
-      isGroup ? pos.x - GROUP_DEFAULT_W / 2 : pos.x,
-      isGroup ? pos.y - GROUP_DEFAULT_H / 2 : pos.y,
+      pos_x: isGroup ? pos.x - GROUP_DEFAULT_W / 2 : pos.x,
+      pos_y: isGroup ? pos.y - GROUP_DEFAULT_H / 2 : pos.y,
       color,
-      undefined, undefined,
-      isGroup ? GROUP_DEFAULT_W : undefined,
-      isGroup ? GROUP_DEFAULT_H : undefined,
-    )
+      width: isGroup ? GROUP_DEFAULT_W : undefined,
+      height: isGroup ? GROUP_DEFAULT_H : undefined,
+    })
     setDbNodes((prev) => [...prev, newNode]); closeMenu()
     setEditingNodeId(newNode.id); setEditingLabel(newNode.label)
   }
 
-  async function deleteNode(id: string) {
+  async function deleteNodes(ids: string[], edgeIds: string[] = []) {
+    if (!ids.length && !edgeIds.length) return
     pushSnapshot()
-    // Unparent any children that are in this group before deleting
-    const groupChildren = dbNodes.filter((n) => n.group_id === id)
-    await Promise.all(groupChildren.map((n) => window.api.canvas.updateNode(n.id, { group_id: null })))
-    setDbNodes((prev) => prev.map((n) => n.group_id === id ? { ...n, group_id: null } : n))
-
-    await window.api.canvas.deleteNode(id)
-    setDbNodes((prev) => prev.filter((n) => n.id !== id))
-    setDbEdges((prev) => prev.filter((e) => e.from_id !== id && e.to_id !== id))
-    if (inspectorNodeId === id) setInspectorNodeId(null)
+    const all = dbNodesRef.current
+    const doomed = new Set(ids)
+    // Members of a deleted group are released in place (relative → absolute position)
+    const released = all
+      .filter((n) => n.group_id && doomed.has(n.group_id) && !doomed.has(n.id))
+      .map((n) => {
+        const g = all.find((x) => x.id === n.group_id)!
+        return { ...n, group_id: null, pos_x: g.pos_x + n.pos_x, pos_y: g.pos_y + n.pos_y }
+      })
+    await Promise.all([
+      ...released.map((n) => window.api.canvas.updateNode(n.id, { group_id: null, pos_x: n.pos_x, pos_y: n.pos_y })),
+      ...ids.map((id) => window.api.canvas.deleteNode(id)),
+      ...edgeIds.map((id) => window.api.canvas.deleteEdge(id)),
+    ])
+    const releasedById = new Map(released.map((n) => [n.id, n]))
+    const doomedEdges = new Set(edgeIds)
+    setDbNodes((prev) => prev
+      .filter((n) => !doomed.has(n.id))
+      .map((n) => releasedById.get(n.id) ?? (n.parent_id && doomed.has(n.parent_id) ? { ...n, parent_id: null } : n)))
+    setDbEdges((prev) => prev.filter((e) => !doomedEdges.has(e.id) && !doomed.has(e.from_id) && !doomed.has(e.to_id)))
+    if (inspectorNodeId && doomed.has(inspectorNodeId)) setInspectorNodeId(null)
+    if (inspectorEdgeId && doomedEdges.has(inspectorEdgeId)) setInspectorEdgeId(null)
     closeMenu()
   }
+
+  const deleteNode = (id: string) => deleteNodes([id])
 
   async function setNodeColor(id: string, color: string | null) {
     pushSnapshot()
@@ -406,7 +423,7 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
     setDbNodes((prev) => prev.map((n) => n.id === id ? { ...n, color } : n)); closeMenu()
   }
 
-  async function setNodeType(id: string, type: 'skill' | 'note' | 'group') {
+  async function setNodeType(id: string, type: CanvasNodeType) {
     pushSnapshot()
     await window.api.canvas.updateNode(id, { type })
     setDbNodes((prev) => prev.map((n) => n.id === id ? { ...n, type } : n))
@@ -438,8 +455,8 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
     setDbNodes((prev) => prev.map((n) => n.id === id ? { ...n, icon } : n))
   }
 
-  async function setNodeShape(id: string, shape: string) {
-    await window.api.canvas.updateNode(id, { shape: shape as 'circle' | 'diamond' | 'hexagon' | 'square' | 'rectangle' | 'roundedSquare' })
+  async function setNodeShape(id: string, shape: NodeShape) {
+    await window.api.canvas.updateNode(id, { shape })
     setDbNodes((prev) => prev.map((n) => n.id === id ? { ...n, shape } : n))
   }
 
@@ -557,19 +574,10 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
       if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'z')) { e.preventDefault(); redo(); return }
       if (e.key === 'f' || e.key === 'F') { fitView({ duration: 300 }); return }
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        const selNodes = getNodes().filter((n) => n.selected)
-        const selEdges = getEdges().filter((ed) => ed.selected)
-        if (!selNodes.length && !selEdges.length) return
-        pushSnapshot()
-        Promise.all([
-          ...selNodes.map((n) => window.api.canvas.deleteNode(n.id)),
-          ...selEdges.map((ed) => window.api.canvas.deleteEdge(ed.id)),
-        ]).then(() => {
-          const nids = new Set(selNodes.map((n) => n.id))
-          const eids = new Set(selEdges.map((ed) => ed.id))
-          setDbNodes((prev) => prev.filter((n) => !nids.has(n.id)))
-          setDbEdges((prev) => prev.filter((ed) => !eids.has(ed.id) && !nids.has(ed.from_id) && !nids.has(ed.to_id)))
-        })
+        deleteNodes(
+          getNodes().filter((n) => n.selected).map((n) => n.id),
+          getEdges().filter((ed) => ed.selected).map((ed) => ed.id),
+        )
         return
       }
       if (e.key === 's' || e.key === 'S' || e.key === 'n' || e.key === 'N' || e.key === 'g' || e.key === 'G') {

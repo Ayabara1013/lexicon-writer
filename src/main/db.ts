@@ -3,6 +3,9 @@ import { app } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { randomUUID } from 'crypto'
+import type { Canvas, CanvasNode, CanvasEdge, CanvasNodeInit, CanvasNodeFields, CanvasEdgeFields, EdgeKind, NodePosition } from '../../shared/types'
+
+export type { Canvas, CanvasNode, CanvasEdge }
 
 export type DocRow = {
   id: string
@@ -113,6 +116,22 @@ export function initDb(): void {
   try { db.exec('ALTER TABLE canvases ADD COLUMN deleted_at INTEGER') } catch {}
   try { db.exec('ALTER TABLE canvas_nodes ADD COLUMN deleted_at INTEGER') } catch {}
   try { db.exec('ALTER TABLE canvas_edges ADD COLUMN deleted_at INTEGER') } catch {}
+  // Talent tree: ranks, costs, unlock rules, typed links
+  try { db.exec('ALTER TABLE canvas_nodes ADD COLUMN description TEXT') } catch {}
+  try { db.exec('ALTER TABLE canvas_nodes ADD COLUMN max_rank INTEGER NOT NULL DEFAULT 1') } catch {}
+  try { db.exec('ALTER TABLE canvas_nodes ADD COLUMN point_cost INTEGER NOT NULL DEFAULT 1') } catch {}
+  try { db.exec('ALTER TABLE canvas_nodes ADD COLUMN requirements TEXT') } catch {}
+  try { db.exec("ALTER TABLE canvas_nodes ADD COLUMN prereq_mode TEXT NOT NULL DEFAULT 'all'") } catch {}
+  try { db.exec('ALTER TABLE canvas_edges ADD COLUMN min_rank INTEGER NOT NULL DEFAULT 1') } catch {}
+  try {
+    db.exec("ALTER TABLE canvas_edges ADD COLUMN kind TEXT NOT NULL DEFAULT 'related'")
+    // First run only: links that mirror a parent → child relationship were drawn as
+    // "this unlocks that", so treat them as prerequisites.
+    db.exec(`
+      UPDATE canvas_edges SET kind = 'prereq'
+      WHERE EXISTS (SELECT 1 FROM canvas_nodes t WHERE t.id = canvas_edges.to_id AND t.parent_id = canvas_edges.from_id)
+    `)
+  } catch {}
   // Backfill sort_order for existing rows that have 0
   db.exec('UPDATE documents SET sort_order = rowid WHERE sort_order = 0')
 
@@ -330,45 +349,15 @@ export function upsertDocFromCloud(doc: DocRow): void {
 }
 
 export function upsertCanvasFromCloud(canvas: Canvas): void {
-  db.prepare(`
-    INSERT INTO canvases (id, title, created_at, updated_at, deleted_at)
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET title = excluded.title, updated_at = excluded.updated_at, deleted_at = excluded.deleted_at
-  `).run(canvas.id, canvas.title, canvas.created_at, canvas.updated_at ?? null, canvas.deleted_at ?? null)
+  writeRow('canvases', canvas, 'upsert')
 }
 
 export function upsertCanvasNodeFromCloud(node: CanvasNode): void {
-  db.prepare(`
-    INSERT INTO canvas_nodes (id, canvas_id, label, type, color, linked_doc_id, pos_x, pos_y, parent_id, group_id, collapsed, icon, shape, width, height, deleted_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      label = excluded.label, type = excluded.type, color = excluded.color,
-      linked_doc_id = excluded.linked_doc_id, pos_x = excluded.pos_x, pos_y = excluded.pos_y,
-      parent_id = excluded.parent_id, group_id = excluded.group_id,
-      collapsed = excluded.collapsed, icon = excluded.icon, shape = excluded.shape,
-      width = excluded.width, height = excluded.height, deleted_at = excluded.deleted_at
-  `).run(
-    node.id, node.canvas_id, node.label, node.type, node.color ?? null,
-    node.linked_doc_id ?? null, node.pos_x, node.pos_y,
-    node.parent_id ?? null, node.group_id ?? null, node.collapsed ?? 0,
-    node.icon ?? null, node.shape ?? 'circle', node.width ?? null, node.height ?? null,
-    node.deleted_at ?? null
-  )
+  writeRow('canvas_nodes', node, 'upsert')
 }
 
 export function upsertCanvasEdgeFromCloud(edge: CanvasEdge): void {
-  db.prepare(`
-    INSERT INTO canvas_edges (id, from_id, to_id, color, label, animated, edge_style, deleted_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      color = excluded.color, label = excluded.label,
-      animated = excluded.animated, edge_style = excluded.edge_style,
-      deleted_at = excluded.deleted_at
-  `).run(
-    edge.id, edge.from_id, edge.to_id, edge.color ?? null,
-    edge.label ?? null, edge.animated ?? 0, edge.edge_style ?? 'straight',
-    edge.deleted_at ?? null
-  )
+  writeRow('canvas_edges', edge, 'upsert')
 }
 
 export function updateDocPosition(id: string, x: number, y: number): void {
@@ -414,39 +403,55 @@ export function deleteDoc(id: string): void {
 
 // Canvas operations
 
-// Canvas types
+// Generic row helpers — driven by the table's real column list, so new columns
+// round-trip through undo snapshots and cloud sync without hand-written SQL.
 
-export type Canvas = { id: string; title: string; created_at: number; updated_at?: number | null; deleted_at?: number | null }
+const columnCache = new Map<string, { name: string; notnull: boolean }[]>()
 
-export type CanvasNode = {
-  id: string
-  canvas_id: string
-  label: string
-  type: 'skill' | 'note' | 'group'
-  color: string | null
-  linked_doc_id: string | null
-  pos_x: number
-  pos_y: number
-  parent_id: string | null
-  group_id: string | null
-  collapsed: number  // 0 | 1
-  icon: string | null
-  shape: 'circle' | 'diamond' | 'hexagon'
-  width: number | null
-  height: number | null
-  deleted_at: number | null
+function tableColumns(table: string): { name: string; notnull: boolean }[] {
+  let cols = columnCache.get(table)
+  if (!cols) {
+    cols = (db.pragma(`table_info(${table})`) as { name: string; notnull: number }[])
+      .map((c) => ({ name: c.name, notnull: c.notnull === 1 }))
+    columnCache.set(table, cols)
+  }
+  return cols
 }
 
-export type CanvasEdge = {
-  id: string
-  from_id: string
-  to_id: string
-  color: string | null
-  label: string | null
-  animated: number  // 0 | 1
-  edge_style: string  // 'straight' | 'bezier' | 'step'
-  deleted_at: number | null
+function toSqlValue(v: unknown): unknown {
+  if (typeof v === 'boolean') return v ? 1 : 0
+  if (v !== null && typeof v === 'object') return JSON.stringify(v)
+  return v
 }
+
+// Skips keys the table doesn't have (e.g. cloud-only owner_id) and nulls in NOT NULL
+// columns, so the column default applies to rows written before the column existed.
+function writeRow(table: string, row: object, mode: 'insert' | 'upsert'): void {
+  const r = row as Record<string, unknown>
+  const names = tableColumns(table)
+    .filter((c) => r[c.name] !== undefined && !(r[c.name] === null && c.notnull))
+    .map((c) => c.name)
+  let sql = `INSERT INTO ${table} (${names.join(', ')}) VALUES (${names.map(() => '?').join(', ')})`
+  if (mode === 'upsert') {
+    sql += ` ON CONFLICT(id) DO UPDATE SET ${names.filter((n) => n !== 'id').map((n) => `${n} = excluded.${n}`).join(', ')}`
+  }
+  db.prepare(sql).run(...names.map((n) => toSqlValue(r[n])))
+}
+
+function updateRow(table: string, editable: readonly string[], id: string, fields: object): void {
+  const f = fields as Record<string, unknown>
+  const keys = editable.filter((k) => f[k] !== undefined)
+  if (keys.length === 0) return
+  db.prepare(`UPDATE ${table} SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`)
+    .run(...keys.map((k) => toSqlValue(f[k])), id)
+}
+
+const NODE_EDITABLE = [
+  'label', 'type', 'color', 'linked_doc_id', 'pos_x', 'pos_y', 'parent_id', 'group_id',
+  'collapsed', 'icon', 'shape', 'width', 'height',
+  'description', 'max_rank', 'point_cost', 'requirements', 'prereq_mode',
+] as const
+const EDGE_EDITABLE = ['color', 'label', 'animated', 'edge_style', 'kind', 'min_rank'] as const
 
 // Canvas CRUD
 
@@ -490,44 +495,30 @@ export function getCanvasNode(id: string): CanvasNode | undefined {
   return db.prepare('SELECT * FROM canvas_nodes WHERE id = ?').get(id) as CanvasNode | undefined
 }
 
-export function createCanvasNode(canvasId: string, label: string, type: 'skill' | 'note' | 'group', posX = 0, posY = 0, color?: string, linkedDocId?: string, parentId?: string, width?: number, height?: number, groupId?: string): CanvasNode {
+export function createCanvasNode(canvasId: string, init: CanvasNodeInit): CanvasNode {
   const id = randomUUID()
-  db.prepare('INSERT INTO canvas_nodes (id, canvas_id, label, type, color, linked_doc_id, pos_x, pos_y, parent_id, collapsed, width, height, group_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)')
-    .run(id, canvasId, label, type, color ?? null, linkedDocId ?? null, posX, posY, parentId ?? null, width ?? null, height ?? null, groupId ?? null)
+  writeRow('canvas_nodes', { ...init, id, canvas_id: canvasId, collapsed: 0 }, 'insert')
   return getCanvasNode(id)!
 }
 
-export function updateCanvasNode(id: string, fields: {
-  label?: string; type?: 'skill' | 'note' | 'group'; color?: string | null
-  linked_doc_id?: string | null; pos_x?: number; pos_y?: number
-  parent_id?: string | null; group_id?: string | null; collapsed?: number
-  icon?: string | null; shape?: 'circle' | 'diamond' | 'hexagon'
-  width?: number | null; height?: number | null
-}): void {
-  const sets: string[] = []
-  const values: unknown[] = []
-  if (fields.label !== undefined)        { sets.push('label = ?');        values.push(fields.label) }
-  if (fields.type !== undefined)         { sets.push('type = ?');         values.push(fields.type) }
-  if (fields.color !== undefined)        { sets.push('color = ?');        values.push(fields.color) }
-  if (fields.linked_doc_id !== undefined){ sets.push('linked_doc_id = ?');values.push(fields.linked_doc_id) }
-  if (fields.pos_x !== undefined)        { sets.push('pos_x = ?');        values.push(fields.pos_x) }
-  if (fields.pos_y !== undefined)        { sets.push('pos_y = ?');        values.push(fields.pos_y) }
-  if (fields.parent_id !== undefined)    { sets.push('parent_id = ?');    values.push(fields.parent_id) }
-  if (fields.group_id !== undefined)     { sets.push('group_id = ?');     values.push(fields.group_id) }
-  if (fields.collapsed !== undefined)    { sets.push('collapsed = ?');    values.push(fields.collapsed) }
-  if (fields.icon !== undefined)         { sets.push('icon = ?');         values.push(fields.icon) }
-  if (fields.shape !== undefined)        { sets.push('shape = ?');        values.push(fields.shape) }
-  if (fields.width !== undefined)        { sets.push('width = ?');        values.push(fields.width) }
-  if (fields.height !== undefined)       { sets.push('height = ?');       values.push(fields.height) }
-  if (sets.length === 0) return
-  values.push(id)
-  db.prepare(`UPDATE canvas_nodes SET ${sets.join(', ')} WHERE id = ?`).run(...values)
+export function updateCanvasNode(id: string, fields: CanvasNodeFields): void {
+  updateRow('canvas_nodes', NODE_EDITABLE, id, fields)
+}
+
+export function updateCanvasPositions(positions: NodePosition[]): void {
+  db.transaction(() => {
+    for (const p of positions) updateRow('canvas_nodes', NODE_EDITABLE, p.id, { pos_x: p.pos_x, pos_y: p.pos_y, width: p.width, height: p.height })
+  })()
 }
 
 export function deleteCanvasNode(id: string): void {
   const now = Date.now()
-  db.prepare('UPDATE canvas_edges SET deleted_at = ? WHERE from_id = ? OR to_id = ?').run(now, id, id)
-  db.prepare('UPDATE canvas_nodes SET deleted_at = ? WHERE id = ?').run(now, id)
+  db.transaction(() => {
+    db.prepare('UPDATE canvas_edges SET deleted_at = ? WHERE from_id = ? OR to_id = ?').run(now, id, id)
+    db.prepare('UPDATE canvas_nodes SET deleted_at = ? WHERE id = ?').run(now, id)
+    // Soft delete doesn't fire ON DELETE SET NULL, so orphan sub-nodes by hand
+    db.prepare('UPDATE canvas_nodes SET parent_id = NULL WHERE parent_id = ?').run(id)
+  })()
 }
 
 // Canvas edge CRUD
@@ -544,22 +535,14 @@ export function getCanvasEdge(id: string): CanvasEdge | undefined {
   return db.prepare('SELECT * FROM canvas_edges WHERE id = ?').get(id) as CanvasEdge | undefined
 }
 
-export function createCanvasEdge(fromId: string, toId: string, color?: string): CanvasEdge {
+export function createCanvasEdge(fromId: string, toId: string, color?: string | null, kind: EdgeKind = 'related'): CanvasEdge {
   const id = randomUUID()
-  db.prepare('INSERT INTO canvas_edges (id, from_id, to_id, color) VALUES (?, ?, ?, ?)').run(id, fromId, toId, color ?? null)
+  db.prepare('INSERT INTO canvas_edges (id, from_id, to_id, color, kind) VALUES (?, ?, ?, ?, ?)').run(id, fromId, toId, color ?? null, kind)
   return getCanvasEdge(id)!
 }
 
-export function updateCanvasEdge(id: string, fields: { color?: string | null; label?: string | null; animated?: number; edge_style?: string }): void {
-  const sets: string[] = []
-  const values: unknown[] = []
-  if (fields.color !== undefined)      { sets.push('color = ?');      values.push(fields.color) }
-  if (fields.label !== undefined)      { sets.push('label = ?');      values.push(fields.label) }
-  if (fields.animated !== undefined)   { sets.push('animated = ?');   values.push(fields.animated) }
-  if (fields.edge_style !== undefined) { sets.push('edge_style = ?'); values.push(fields.edge_style) }
-  if (sets.length === 0) return
-  values.push(id)
-  db.prepare(`UPDATE canvas_edges SET ${sets.join(', ')} WHERE id = ?`).run(...values)
+export function updateCanvasEdge(id: string, fields: CanvasEdgeFields): void {
+  updateRow('canvas_edges', EDGE_EDITABLE, id, fields)
 }
 
 export function deleteCanvasEdge(id: string): void {
@@ -570,9 +553,16 @@ export function restoreCanvasSnapshot(canvasId: string, nodes: CanvasNode[], edg
   db.transaction(() => {
     db.prepare('DELETE FROM canvas_edges WHERE from_id IN (SELECT id FROM canvas_nodes WHERE canvas_id = ?)').run(canvasId)
     db.prepare('DELETE FROM canvas_nodes WHERE canvas_id = ?').run(canvasId)
-    const ni = db.prepare('INSERT INTO canvas_nodes (id, canvas_id, label, type, color, linked_doc_id, pos_x, pos_y, parent_id, group_id, collapsed, icon, shape, width, height) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    for (const n of nodes) ni.run(n.id, n.canvas_id, n.label, n.type, n.color, n.linked_doc_id, n.pos_x, n.pos_y, n.parent_id, n.group_id ?? null, n.collapsed ?? 0, n.icon ?? null, n.shape ?? 'circle', n.width ?? null, n.height ?? null)
-    const ei = db.prepare('INSERT INTO canvas_edges (id, from_id, to_id, color, label, animated, edge_style) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    for (const e of edges) ei.run(e.id, e.from_id, e.to_id, e.color, e.label ?? null, e.animated ?? 0, e.edge_style ?? 'straight')
+    // Nodes reference each other (parent_id / group_id) in no particular order
+    db.pragma('defer_foreign_keys = ON')
+    const ids = new Set(nodes.map((n) => n.id))
+    for (const n of nodes) {
+      writeRow('canvas_nodes', {
+        ...n,
+        parent_id: n.parent_id && ids.has(n.parent_id) ? n.parent_id : null,
+        group_id: n.group_id && ids.has(n.group_id) ? n.group_id : null,
+      }, 'insert')
+    }
+    for (const e of edges) writeRow('canvas_edges', e, 'insert')
   })()
 }

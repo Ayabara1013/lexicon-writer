@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
-import { listDocs, getDoc, createDoc, updateDoc, deleteDoc, updateDocPosition, getSetting, setSetting, getAllSettings, listCanvases, createCanvas, updateCanvas, deleteCanvas, getOrCreateDefaultCanvas, listCanvasNodes, listCanvasEdges, createCanvasNode, updateCanvasNode, deleteCanvasNode, createCanvasEdge, updateCanvasEdge, deleteCanvasEdge, restoreCanvasSnapshot, type CanvasNode, type CanvasEdge } from './db'
+import { listDocs, getDoc, createDoc, updateDoc, deleteDoc, updateDocPosition, getSetting, setSetting, getAllSettings, listCanvases, createCanvas, updateCanvas, deleteCanvas, getOrCreateDefaultCanvas, listCanvasNodes, listCanvasEdges, createCanvasNode, updateCanvasNode, deleteCanvasNode, createCanvasEdge, updateCanvasEdge, deleteCanvasEdge, restoreCanvasSnapshot, updateCanvasPositions, type CanvasNode, type CanvasEdge } from './db'
+import type { CanvasNodeInit, CanvasNodeFields, CanvasEdgeFields, EdgeKind, NodePosition } from '../../shared/types'
 import { autoCommit, manualCommit, getStatus, createBranch, switchBranch, deleteBranch, pushGitHub, getCommitDiff, getWordDeltas, getChanges, getDocHistory } from './git'
 import { cloudSignIn, cloudSignOut, cloudGetSession, cloudPushAll, cloudPullAll, cloudPushDoc } from './cloud'
 import { exportManuscript } from './export'
@@ -39,14 +40,13 @@ export function setupIpc(): void {
   ipcMain.handle('canvas:getDefault', () => getOrCreateDefaultCanvas())
   ipcMain.handle('canvas:listNodes', (_e, canvasId: string) => listCanvasNodes(canvasId))
   ipcMain.handle('canvas:listEdges', (_e, canvasId: string) => listCanvasEdges(canvasId))
-  ipcMain.handle('canvas:createNode', (_e, canvasId: string, label: string, type: 'skill' | 'note' | 'group', posX: number, posY: number, color?: string, linkedDocId?: string, parentId?: string, width?: number, height?: number) =>
-    createCanvasNode(canvasId, label, type, posX, posY, color, linkedDocId, parentId, width, height)
-  )
-  ipcMain.handle('canvas:updateNode', (_e, id: string, fields: Parameters<typeof updateCanvasNode>[1]) => { updateCanvasNode(id, fields); return true })
+  ipcMain.handle('canvas:createNode', (_e, canvasId: string, init: CanvasNodeInit) => createCanvasNode(canvasId, init))
+  ipcMain.handle('canvas:updateNode', (_e, id: string, fields: CanvasNodeFields) => { updateCanvasNode(id, fields); return true })
+  ipcMain.handle('canvas:updatePositions', (_e, positions: NodePosition[]) => { updateCanvasPositions(positions); return true })
   ipcMain.handle('canvas:deleteNode', (_e, id: string) => { deleteCanvasNode(id); return true })
-  ipcMain.handle('canvas:createEdge', (_e, fromId: string, toId: string, color?: string) => createCanvasEdge(fromId, toId, color))
+  ipcMain.handle('canvas:createEdge', (_e, fromId: string, toId: string, color?: string | null, kind?: EdgeKind) => createCanvasEdge(fromId, toId, color, kind))
   ipcMain.handle('canvas:restoreSnapshot', (_e, canvasId: string, nodes: CanvasNode[], edges: CanvasEdge[]) => { restoreCanvasSnapshot(canvasId, nodes, edges); return true })
-  ipcMain.handle('canvas:updateEdge', (_e, id: string, fields: { color?: string | null; label?: string | null; animated?: number; edge_style?: string }) => { updateCanvasEdge(id, fields); return true })
+  ipcMain.handle('canvas:updateEdge', (_e, id: string, fields: CanvasEdgeFields) => { updateCanvasEdge(id, fields); return true })
   ipcMain.handle('canvas:deleteEdge', (_e, id: string) => { deleteCanvasEdge(id); return true })
 
   ipcMain.handle('git:status', () => getStatus())

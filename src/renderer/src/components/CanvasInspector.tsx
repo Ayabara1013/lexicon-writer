@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import type { CanvasNode, CanvasEdge, DocMeta } from '../env'
+import type { CanvasNode, CanvasEdge, CanvasNodeType, NodeShape, DocMeta } from '../env'
 
 const COLORS = [
   { label: 'Violet', value: '#7c6af7' },
@@ -30,9 +30,9 @@ const EDGE_STYLES = [
 type NodeCallbacks = {
   onLabelChange: (id: string, label: string) => void
   onColorChange: (id: string, color: string | null) => void
-  onTypeChange: (id: string, type: 'skill' | 'note' | 'group') => void
+  onTypeChange: (id: string, type: CanvasNodeType) => void
   onIconChange: (id: string, icon: string | null) => void
-  onShapeChange: (id: string, shape: string) => void
+  onShapeChange: (id: string, shape: NodeShape) => void
   onLinkedDocChange: (id: string, docId: string | null) => void
   onCollapseToggle: (id: string) => void
   onRemoveFromGroup: (id: string) => void
