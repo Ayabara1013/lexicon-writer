@@ -7,6 +7,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
+    "test": "vitest run",
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "npm run build && electron-builder --mac",
     "build:linux": "npm run build && electron-builder --linux",
@@ -39,7 +40,8 @@
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.4",
     "typescript": "^5.5.2",
-    "vite": "^5.3.1"
+    "vite": "^5.3.1",
+    "vitest": "^2.1.9"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.5",

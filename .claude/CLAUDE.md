@@ -40,6 +40,10 @@ Renderer → window.api.namespace.method()
 ```sql
 documents (id, title, type, content, created_at, updated_at, pos_x, pos_y, parent_id, sort_order)
 settings  (key TEXT PRIMARY KEY, value TEXT)
+canvases     (id, title, created_at, updated_at, deleted_at)
+canvas_nodes (id, canvas_id, label, type, color, linked_doc_id, pos_x, pos_y, parent_id, group_id, collapsed, icon, shape,
+              width, height, description, max_rank, point_cost, requirements /*JSON*/, prereq_mode, deleted_at)
+canvas_edges (id, from_id, to_id, color, label, animated, edge_style, kind, min_rank, deleted_at)
 ```
 - `parent_id` — sub-chapters (one level nesting, chapters only)
 - `sort_order` — ordering, backfilled with rowid on migration
@@ -63,6 +67,18 @@ All diffs use `git --word-diff=plain` so prose is tracked at the WORD level (not
 - `getDocHistory(docId)` — commit log filtered to one doc's file (`chapters|notes/<id>.md`) with per-commit word deltas
 - IPC: `git:commitDiff`, `git:wordDeltas`, `git:changes`, `git:docHistory`
 
+## Canvas / talent tree builder (🌐 Canvas view)
+Canvas types live ONCE in `shared/types.ts` (imported by main via relative path, by renderer via `@shared`).
+- **Node types**: `skill | passive | stat | keystone` (talents) + `note` (links a doc) + `group` (container; members store pos relative to it via `group_id`)
+- **Ranks**: `max_rank` (e.g. 5 → shows 0/5 pips), `point_cost` per rank, `requirements` JSON (`points_spent` tree/group, `level`, `custom` = not enforced), `prereq_mode` all/any
+- **Sub-nodes** = `parent_id` (drives collapse, colour inheritance, layout). Creating one (Tab / drag link to empty space) also makes a prereq link. Drawing a link between existing nodes does NOT re-parent.
+- **Link kinds** (`canvas_edges.kind`): `prereq` (from must reach `min_rank` before to), `exclusive` (only one side), `synergy`, `related` (no rules)
+- **Rules** — `talent/rules.ts` (pure): `evaluate` / `allocate` / `refund` / `validate` (loops, impossible ranks, never-unlockable nodes). Tests: `npm test` (vitest, `talent/rules.test.ts`).
+- **Preview mode** — ▶ Preview: budget + level, click = +1 rank, right-click = −1 (refund blocked if something depends on it). Allocations are NOT saved. Budget/level saved per canvas in settings `canvas_preview:<id>`.
+- **Layout** — `talent/useForceLayout.ts` (🧲 Auto-arrange, d3-force live physics; persists positions once on settle via batch `canvas:updatePositions`; per-canvas setting `canvas_layout:<id>`), `talent/layout.ts` (⇵ Tidy = dagre one-shot, groups as clusters; `resolveLayout` refits groups + carries collapsed subtrees).
+- **DB helpers**: `writeRow`/`updateRow` in db.ts are driven by `PRAGMA table_info`, so new columns automatically round-trip through undo snapshots (`restoreCanvasSnapshot`) and cloud upserts. Add a column = migration in `initDb` + type in `shared/types.ts` + (if editable) `NODE_EDITABLE`/`EDGE_EDITABLE`.
+- **Cloud**: `supabase/migrations/*_talent_tree.sql` must be applied to the Supabase project before pushing canvases with the new columns.
+
 ## Key files
 ```
 src/main/
@@ -81,11 +97,20 @@ src/renderer/src/
     Sidebar.tsx         — collapsible chapter tree with sub-chapters, tabs
     Editor.tsx          — TipTap editor with toolbar + SystemWindow extension
     Corkboard.tsx       — @xyflow/react canvas, doc cards, drag-to-reposition
+    TalentCanvas.tsx    — talent tree / mind-map canvas (toolbar, context menus, preview mode, layout wiring)
+    TalentNode.tsx      — node renderer (shapes per type, rank pips, cost badge, tooltip, preview states)
+    CanvasInspector.tsx — right panel: node fields (ranks, cost, requirements…) / link kind + min rank
+    FloatingEdge.tsx    — edge renderer (straight / spline / step, label)
     CorkboardNode.tsx   — custom XYFlow node (chapter/note cards)
     GitPanel.tsx        — two-pane: left = repo/GitHub config + branches + snapshot + History/Changes tabs + commit-graph list w/ word-delta badges; right = word-diff viewer. Props: filterDocId/onClearFilter (per-chapter history mode)
     SystemWindowView.tsx — React NodeView for LitRPG system windows
   extensions/
     SystemWindow.ts     — TipTap v2 node extension for LitRPG windows
+  talent/
+    model.ts            — node-type / link-kind metadata, requirement helpers
+    rules.ts            — talent rules engine (+ rules.test.ts)
+    layout.ts           — tree tidy (dagre) + shared group-fitting
+    useForceLayout.ts   — live force layout hook (d3-force)
 
 tailwind.config.js    — lexicon DaisyUI theme (base-100 #13111e, primary #7c6af7)
 src/renderer/index.html — data-theme="lexicon", Inter font Google Fonts link
@@ -96,6 +121,7 @@ src/renderer/src/assets/index.css — prose colour overrides, font-family: Inter
 Three views toggled via buttons in main area header:
 - `✏️ Editor` — TipTap manuscript editor
 - `🗂 Corkboard` — XYFlow canvas with doc cards
+- `🌐 Canvas` — talent tree / mind-map builder (see Canvas section)
 - `⎇ History` — Git panel (branches, commits, AI snapshot, word-diff viewer, Changes tab, per-chapter history)
 
 ## Sidebar structure
@@ -121,19 +147,12 @@ Future: license key validation via server — gates already in place.
 Spellshot (user's own LitRPG novel) seeded from `C:/Users/jalla/Downloads/Spellshot(1).md` on first launch if DB is empty. Chapters parsed by regex, notes for key characters added.
 
 ## NEXT PRIORITIES (in order)
-1. **🌐 Canvas / Talent Tree builder** — ACTIVE NEXT TASK
-   - Multiple named canvases (new DB tables: `canvases`, `canvas_nodes`, `canvas_edges`)
-   - Node types: `skill` (circle + glow), `note` (links to doc), `text` (label), `group` (container)
-   - Colored edges (8 presets)
-   - Right-click to add node, node inspector panel on right
-   - New `🌐 Canvas` view toggle in App.tsx
-   - Reference image: Pillars of Eternity-style skill tree
-   - Obsidian canvas parity: note nodes show doc title + first line, double-click opens in Editor
-
-2. **Paragraph drag handles** — Notion-style block reordering in manuscript editor
+1. **Paragraph drag handles** — Notion-style block reordering in manuscript editor
    - TipTap v2 compatible approach needed (v3 extension won't work)
 
-3. **Notion-style block editor for Notes tab**
+2. **Notion-style block editor for Notes tab**
+
+3. **Talent tree follow-ups** (MVP done): saved builds per character (link to a doc), per-rank descriptions/costs, apply the Supabase migration, canvas in the web app
 
 ## BACKLOG (not started)
 - Slash command menu (`/` triggers block picker)

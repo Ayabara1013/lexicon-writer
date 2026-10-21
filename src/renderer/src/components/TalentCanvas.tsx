@@ -13,6 +13,8 @@ import '@xyflow/react/dist/style.css'
 import type { Canvas, CanvasNode, CanvasEdge, CanvasNodeType, CanvasNodeFields, CanvasEdgeFields, NodePosition, NodeShape, DocMeta } from '../env'
 import { applyPositions, resolveLayout, treeLayout, type LayoutDirection, type Size } from '../talent/layout'
 import { useForceLayout } from '../talent/useForceLayout'
+import { allocate, evaluate, refund, validate, type Allocation, type PreviewSettings } from '../talent/rules'
+import type { NodeState } from '../talent/model'
 import { EDGE_KIND_META, EDGE_KINDS, NODE_TYPE_META, childTypeFor, describeRequirement, isTalent, parseRequirements, rankLabel } from '../talent/model'
 import TalentNode from './TalentNode'
 import FloatingEdge from './FloatingEdge'
@@ -36,6 +38,10 @@ const nodeTypes = { talent: TalentNode }
 const edgeTypes = { floating: FloatingEdge }
 
 type Snapshot = { nodes: CanvasNode[]; edges: CanvasEdge[] }
+
+const DEFAULT_PREVIEW: PreviewSettings = { budget: 10, level: 1 }
+// Notes aren't part of a build — shown faded in preview mode
+const NOTE_PREVIEW: NodeState = { rank: 0, state: 'locked', canAdd: false, reasons: [] }
 
 // ── Color helpers ────────────────────────────────────────────────────────────
 
@@ -106,6 +112,13 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
   const [layoutMode, setLayoutMode] = useState<'free' | 'force'>('free')
   const livePositions = useRef(new Map<string, NodePosition>())
 
+  // Preview mode: spend points like a player would; nothing is saved
+  const [previewMode, setPreviewMode] = useState(false)
+  const [allocation, setAllocation] = useState<Allocation>({})
+  const [previewSettings, setPreviewSettings] = useState<PreviewSettings>(DEFAULT_PREVIEW)
+  const [toast, setToast] = useState<{ text: string; key: number } | null>(null)
+  const [showWarnings, setShowWarnings] = useState(false)
+
   const flowRef = useRef<HTMLDivElement>(null)
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -122,6 +135,8 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
   useEffect(() => { dbEdgesRef.current = dbEdges }, [dbEdges])
   useEffect(() => { canvasIdRef.current = canvasId }, [canvasId])
   const pendingSelectRef = useRef<string | null>(null)
+  const previewModeRef = useRef(previewMode)
+  previewModeRef.current = previewMode
   const layoutModeRef = useRef(layoutMode)
   layoutModeRef.current = layoutMode
   const inspectorNodeIdRef = useRef(inspectorNodeId)
@@ -162,8 +177,14 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
     if (!canvasId) return
     undoStack.current = []; redoStack.current = []
     setInspectorNodeId(null); setInspectorEdgeId(null)
-    Promise.all([window.api.canvas.listNodes(canvasId), window.api.canvas.listEdges(canvasId), window.api.settings.get(`canvas_layout:${canvasId}`)])
-      .then(([n, e, mode]) => { setDbNodes(n); setDbEdges(e); setLayoutMode(mode === 'force' ? 'force' : 'free') })
+    setPreviewMode(false); setAllocation({}); setShowWarnings(false)
+    Promise.all([
+      window.api.canvas.listNodes(canvasId), window.api.canvas.listEdges(canvasId),
+      window.api.settings.get(`canvas_layout:${canvasId}`), window.api.settings.get(`canvas_preview:${canvasId}`),
+    ]).then(([n, e, mode, preview]) => {
+      setDbNodes(n); setDbEdges(e); setLayoutMode(mode === 'force' ? 'force' : 'free')
+      try { setPreviewSettings({ ...DEFAULT_PREVIEW, ...(preview ? JSON.parse(preview) : {}) }) } catch { setPreviewSettings(DEFAULT_PREVIEW) }
+    })
   }, [canvasId])
 
   useEffect(() => {
@@ -187,6 +208,12 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
     dbNodes.filter((n) => n.collapsed).forEach((n) => { counts[n.id] = getDescendants(n.id, dbNodes).size })
     return counts
   }, [dbNodes])
+
+  // ── Rules: preview evaluation + authoring warnings ─────────────────────
+
+  const tree = useMemo(() => ({ nodes: dbNodes, edges: dbEdges }), [dbNodes, dbEdges])
+  const evaluation = useMemo(() => (previewMode ? evaluate(tree, allocation, previewSettings) : null), [previewMode, tree, allocation, previewSettings])
+  const warnings = useMemo(() => validate(tree), [tree])
 
   // ── DB → XYFlow conversion ─────────────────────────────────────────────
 
@@ -247,7 +274,7 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
             pointCost: n.point_cost ?? 1,
             prereqs: prereqLabels[n.id] ?? [],
             requirements: parseRequirements(n.requirements).map(describeRequirement),
-            preview: null,
+            preview: evaluation ? evaluation.states[n.id] ?? (n.type === 'note' ? NOTE_PREVIEW : null) : null,
             onDoubleClick: n.linked_doc_id ? () => onOpenDoc(n.linked_doc_id!) : undefined,
             onResizeEnd: n.type === 'group'
               ? (w: number, h: number) => onResizeEndRef.current(n.id, w, h)
@@ -268,7 +295,7 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
         return base
       })
     })
-  }, [dbNodes, hiddenNodeIds, hiddenChildCounts, docPreviews, onOpenDoc, searchMatchIds, prereqLabels])
+  }, [dbNodes, hiddenNodeIds, hiddenChildCounts, docPreviews, onOpenDoc, searchMatchIds, prereqLabels, evaluation])
 
   useEffect(() => {
     setEdges(dbEdges
@@ -283,20 +310,24 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
         const rankHint = e.kind === 'prereq' && from && isTalent(from) && e.min_rank > 1
           ? rankLabel(Math.min(e.min_rank, from.max_rank), from.max_rank)
           : undefined
+        let opacity = dimmed ? 0.15 : e.kind === 'related' ? 0.6 : 1
+        if (evaluation) {
+          const rank = (id: string) => evaluation.states[id]?.rank ?? 0
+          if (e.kind === 'prereq' && from && isTalent(from)) opacity = rank(e.from_id) >= Math.min(e.min_rank, from.max_rank) ? 1 : 0.25
+          else if (e.kind === 'exclusive') opacity = rank(e.from_id) > 0 || rank(e.to_id) > 0 ? 1 : 0.35
+          else opacity = 0.2
+        }
         return {
           id: e.id, type: 'floating',
           source: e.from_id, target: e.to_id,
           animated: !!e.animated,
-          style: {
-            stroke: color, strokeWidth: meta.width, strokeDasharray: meta.dash,
-            opacity: dimmed ? 0.15 : e.kind === 'related' ? 0.6 : 1,
-          },
+          style: { stroke: color, strokeWidth: meta.width, strokeDasharray: meta.dash, opacity },
           markerEnd: meta.arrow ? { type: MarkerType.ArrowClosed, color } : undefined,
           data: { label: e.label ?? rankHint, edgeStyle: e.edge_style ?? 'straight' },
         }
       })
     )
-  }, [dbEdges, dbNodes, hiddenNodeIds, searchMatchIds])
+  }, [dbEdges, dbNodes, hiddenNodeIds, searchMatchIds, evaluation])
 
   // ── Auto-layout ────────────────────────────────────────────────────────
 
@@ -470,13 +501,75 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
     addSubNode(parent.id, { x: pos.x - 40 - (group?.pos_x ?? 0), y: pos.y - 40 - (group?.pos_y ?? 0) })
   }, [canvasId, screenToFlowPosition])
 
-  const onNodeClick: NodeMouseHandler = useCallback((_e, node) => {
-    setInspectorNodeId(node.id); setInspectorEdgeId(null); closeMenu()
-  }, [])
+  // ── Preview mode ───────────────────────────────────────────────────────
 
-  const onEdgeClick: EdgeMouseHandler = useCallback((_e, edge) => {
+  function flash(text: string) {
+    setToast({ text, key: Date.now() })
+  }
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 2200)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  /** +1 rank (or as many as allowed with `all`); explains why when nothing could be taken */
+  function previewSpend(id: string, all: boolean) {
+    const node = dbNodes.find((n) => n.id === id)
+    if (!node || !isTalent(node)) return
+    let alloc = allocation
+    let taken = 0
+    for (;;) {
+      const r = allocate(tree, alloc, previewSettings, id)
+      if ('error' in r) { if (!taken) flash(r.error); break }
+      alloc = r.alloc; taken++
+      if (!all) break
+    }
+    if (taken) setAllocation(alloc)
+  }
+
+  function previewRefund(id: string, all: boolean) {
+    let alloc = allocation
+    let returned = 0
+    for (;;) {
+      const r = refund(tree, alloc, previewSettings, id)
+      if ('error' in r) { if (!returned && r.error !== 'No points to refund') flash(`Can't refund: ${r.error}`); break }
+      alloc = r.alloc; returned++
+      if (!all) break
+    }
+    if (returned) setAllocation(alloc)
+  }
+
+  function enterPreview() {
+    setInspectorNodeId(null); setInspectorEdgeId(null); closeMenu(); setEditingNodeId(null)
+    setNodes((nds) => nds.map((n) => (n.selected ? { ...n, selected: false } : n)))
+    setAllocation({}); setPreviewMode(true)
+  }
+
+  function exitPreview() {
+    setPreviewMode(false); setAllocation({})
+  }
+
+  function updatePreviewSettings(next: Partial<PreviewSettings>) {
+    const merged = { ...previewSettings, ...next }
+    setPreviewSettings(merged)
+    if (canvasId) window.api.settings.set(`canvas_preview:${canvasId}`, JSON.stringify(merged))
+  }
+
+  function focusNode(id: string) {
+    if (previewMode) exitPreview()
+    selectOnly(id)
+    fitView({ nodes: [{ id }], duration: 400, maxZoom: 1.2 })
+  }
+
+  const onNodeClick: NodeMouseHandler = (e, node) => {
+    if (previewMode) { previewSpend(node.id, e.shiftKey); return }
+    setInspectorNodeId(node.id); setInspectorEdgeId(null); closeMenu()
+  }
+
+  const onEdgeClick: EdgeMouseHandler = (_e, edge) => {
+    if (previewMode) return
     setInspectorEdgeId(edge.id); setInspectorNodeId(null); closeMenu()
-  }, [])
+  }
 
   // ── Context menus ──────────────────────────────────────────────────────
 
@@ -485,9 +578,21 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
     return { x: clientX - rect.left, y: clientY - rect.top, clientX, clientY, nodeId, edgeId }
   }, [])
 
-  const onPaneContextMenu = useCallback((e: React.MouseEvent | MouseEvent) => { e.preventDefault(); setContextMenu(buildMenu(e.clientX, e.clientY)); setInspectorNodeId(null); setInspectorEdgeId(null) }, [buildMenu])
-  const onNodeContextMenu: NodeMouseHandler = useCallback((e, node) => { e.preventDefault(); setContextMenu(buildMenu(e.clientX, e.clientY, node.id)) }, [buildMenu])
-  const onEdgeContextMenu: EdgeMouseHandler = useCallback((e, edge) => { e.preventDefault(); setContextMenu(buildMenu(e.clientX, e.clientY, undefined, edge.id)) }, [buildMenu])
+  const onPaneContextMenu = (e: React.MouseEvent | MouseEvent) => {
+    e.preventDefault()
+    if (previewMode) return
+    setContextMenu(buildMenu(e.clientX, e.clientY)); setInspectorNodeId(null); setInspectorEdgeId(null)
+  }
+  const onNodeContextMenu: NodeMouseHandler = (e, node) => {
+    e.preventDefault()
+    if (previewMode) { previewRefund(node.id, e.shiftKey); return }
+    setContextMenu(buildMenu(e.clientX, e.clientY, node.id))
+  }
+  const onEdgeContextMenu: EdgeMouseHandler = (e, edge) => {
+    e.preventDefault()
+    if (previewMode) return
+    setContextMenu(buildMenu(e.clientX, e.clientY, undefined, edge.id))
+  }
   const closeMenu = useCallback(() => setContextMenu(null), [])
 
   // ── Node mutations ─────────────────────────────────────────────────────
@@ -763,6 +868,11 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
     function onKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
+      if (previewModeRef.current) {
+        if (e.key === 'Escape') { setPreviewMode(false); setAllocation({}) }
+        if (e.key === 'f' || e.key === 'F') fitView({ duration: 300 })
+        return
+      }
       if (e.key === 'Escape') { closeMenu(); setEditingNodeId(null); setInspectorNodeId(null); setInspectorEdgeId(null); return }
       if (e.ctrlKey && !e.shiftKey && e.key === 'z') { e.preventDefault(); undo(); return }
       if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'z')) { e.preventDefault(); redo(); return }
@@ -853,7 +963,7 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
         >🧲 Auto-arrange</button>
         {/* Native select: a dropdown menu would be clipped by the toolbar's overflow-hidden */}
         <select
-          className="select select-xs select-ghost w-auto font-semibold"
+          className="select select-xs select-ghost w-[5.5rem] font-semibold"
           title="Arrange once as a tiered tree (undoable)"
           value=""
           onChange={(e) => { const dir = e.target.value as LayoutDirection; e.target.blur(); if (dir) tidy(dir) }}
@@ -883,11 +993,50 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
 
         <button className="btn btn-xs btn-ghost" title="Export PNG" onClick={exportPng}>↓ PNG</button>
 
+        <div className="w-px h-4 bg-base-300" />
+
+        <button
+          className={`btn btn-xs ${previewMode ? 'btn-primary' : 'btn-ghost'}`}
+          title="Preview: spend points like a player to test the tree (nothing is saved)"
+          onClick={() => (previewMode ? exitPreview() : enterPreview())}
+        >{previewMode ? '■ Stop preview' : '▶ Preview'}</button>
+        {warnings.length > 0 && (
+          <button className="btn btn-xs btn-ghost text-warning" title="Problems in this tree" onClick={() => setShowWarnings((v) => !v)}>
+            ⚠ {warnings.length}
+          </button>
+        )}
+
         <div className="flex-1" />
-        <span className="text-[10px] text-base-content/20 select-none pr-1 hidden lg:block">
+        <span className="text-[10px] text-base-content/20 select-none pr-1 hidden 2xl:block truncate min-w-0">
           S · N · G = add · Tab = sub-node · Enter = sibling · F = fit · Del = delete · Ctrl+Z/Y
         </span>
       </div>
+
+      {/* Preview bar */}
+      {previewMode && evaluation && (
+        <div className="flex items-center gap-3 px-3 py-1.5 border-b border-primary/40 bg-primary/10 text-xs shrink-0 z-10 flex-wrap">
+          <span className="font-semibold text-primary uppercase tracking-wide">▶ Preview build</span>
+          <label className="flex items-center gap-1 text-base-content/60">
+            Points
+            <input type="number" min={0} max={9999} className="input input-xs input-bordered w-16"
+              value={previewSettings.budget}
+              onChange={(e) => updatePreviewSettings({ budget: Math.max(0, parseInt(e.target.value, 10) || 0) })} />
+          </label>
+          <label className="flex items-center gap-1 text-base-content/60">
+            Level
+            <input type="number" min={1} max={999} className="input input-xs input-bordered w-14"
+              value={previewSettings.level}
+              onChange={(e) => updatePreviewSettings({ level: Math.max(1, parseInt(e.target.value, 10) || 1) })} />
+          </label>
+          <span className="text-base-content/70">
+            {evaluation.spent} spent · <b className={evaluation.remaining < 0 ? 'text-error' : 'text-primary'}>{evaluation.remaining} left</b>
+          </span>
+          <span className="text-base-content/30 hidden xl:inline">Click +1 · Shift+click max · Right-click −1 · Shift+right-click clear · Esc exit</span>
+          <span className="flex-1" />
+          <button className="btn btn-xs btn-ghost" onClick={() => setAllocation({})} disabled={!Object.keys(allocation).length}>↺ Reset</button>
+          <button className="btn btn-xs btn-ghost" onClick={exitPreview}>✕ Exit</button>
+        </div>
+      )}
 
       {/* Canvas area */}
       <div className="flex-1 overflow-hidden relative" ref={flowRef}>
@@ -895,6 +1044,9 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
           nodes={nodes} edges={edges}
           nodeTypes={nodeTypes} edgeTypes={edgeTypes}
           connectionMode={ConnectionMode.Loose}
+          nodesDraggable={!previewMode}
+          nodesConnectable={!previewMode}
+          elementsSelectable={!previewMode}
           snapToGrid={snapToGrid} snapGrid={[16, 16]}
           onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
           onNodeDragStart={onNodeDrag}
@@ -926,7 +1078,7 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
           <MiniMap nodeColor={(n) => (n.data?.color as string) ?? '#4a4770'} nodeStrokeColor={(n) => (n.data?.color as string) ?? '#6b7280'} nodeStrokeWidth={2} maskColor="#13111ecc" pannable zoomable />
         </ReactFlow>
 
-        <CanvasInspector
+        {!previewMode && <CanvasInspector
           node={inspectorNode}
           edge={inspectorEdge}
           allNodes={dbNodes}
@@ -955,7 +1107,33 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
             onFieldsChange: updateEdgeFields,
             onDelete: deleteEdge,
           }}
-        />
+        />}
+
+        {/* Warnings list */}
+        {showWarnings && warnings.length > 0 && (
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30 w-96 max-w-[90%] bg-base-200 border border-warning/40 rounded-lg shadow-xl">
+            <div className="flex items-center justify-between px-3 py-1.5 border-b border-base-300">
+              <span className="text-xs font-semibold text-warning">⚠ Tree problems</span>
+              <button className="btn btn-xs btn-ghost text-base-content/40" onClick={() => setShowWarnings(false)}>✕</button>
+            </div>
+            <ul className="max-h-64 overflow-y-auto py-1">
+              {warnings.map((w, i) => (
+                <li key={i}>
+                  <button className="w-full text-left px-3 py-1 text-xs hover:bg-base-300 disabled:hover:bg-transparent" disabled={!w.nodeId} onClick={() => w.nodeId && focusNode(w.nodeId)}>
+                    {w.message}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Toast (preview feedback) */}
+        {toast && (
+          <div key={toast.key} className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 px-3 py-1.5 rounded-md bg-base-300 border border-error/50 text-sm text-error shadow-xl pointer-events-none">
+            {toast.text}
+          </div>
+        )}
       </div>
 
       {/* Context menu */}

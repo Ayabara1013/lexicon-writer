@@ -13,7 +13,6 @@ export type NodeState = {
   rank: number
   state: 'locked' | 'available' | 'partial' | 'maxed'
   canAdd: boolean
-  canRemove: boolean
   reasons: string[]   // why it's locked / can't take another rank
 }
 
