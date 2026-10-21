@@ -26,6 +26,7 @@
     "@electron/rebuild": "^4.0.3",
     "@tailwindcss/typography": "^0.5.19",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/d3-force": "^3.0.10",
     "@types/node-cron": "^3.0.11",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
@@ -42,6 +43,7 @@
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.5",
+    "@dagrejs/dagre": "^1.1.8",
     "@electron-toolkit/preload": "^3.0.1",
     "@electron-toolkit/utils": "^3.0.0",
     "@floating-ui/dom": "^1.7.6",
@@ -70,6 +72,7 @@
     "@types/ws": "^8.18.1",
     "@xyflow/react": "^12.3.2",
     "better-sqlite3": "^12.9.0",
+    "d3-force": "^3.0.0",
     "docx": "^9.6.1",
     "html-to-image": "^1.11.13",
     "lucide-react": "^1.14.0",

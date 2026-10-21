@@ -5,12 +5,14 @@ import {
   applyNodeChanges, applyEdgeChanges, ConnectionMode,
   type Node, type Edge, type OnConnect, type OnNodesChange,
   type OnEdgesChange, type NodeMouseHandler, type EdgeMouseHandler,
-  type Connection, type FinalConnectionState, MarkerType,
+  type Connection, type FinalConnectionState, type OnNodeDrag, MarkerType,
   getNodesBounds, getViewportForBounds,
 } from '@xyflow/react'
 import { toPng } from 'html-to-image'
 import '@xyflow/react/dist/style.css'
-import type { Canvas, CanvasNode, CanvasEdge, CanvasNodeType, CanvasNodeFields, CanvasEdgeFields, NodeShape, DocMeta } from '../env'
+import type { Canvas, CanvasNode, CanvasEdge, CanvasNodeType, CanvasNodeFields, CanvasEdgeFields, NodePosition, NodeShape, DocMeta } from '../env'
+import { applyPositions, resolveLayout, treeLayout, type LayoutDirection, type Size } from '../talent/layout'
+import { useForceLayout } from '../talent/useForceLayout'
 import { EDGE_KIND_META, EDGE_KINDS, NODE_TYPE_META, childTypeFor, describeRequirement, isTalent, parseRequirements, rankLabel } from '../talent/model'
 import TalentNode from './TalentNode'
 import FloatingEdge from './FloatingEdge'
@@ -78,7 +80,7 @@ type Props = { docs: DocMeta[]; onOpenDoc: (id: string) => void }
 // ── Inner component (has access to ReactFlow context) ───────────────────────
 
 function TalentCanvasInner({ docs, onOpenDoc }: Props) {
-  const { screenToFlowPosition, fitView, getNodes, getEdges } = useReactFlow()
+  const { screenToFlowPosition, fitView, getNodes, getEdges, getInternalNode } = useReactFlow()
 
   const [canvases, setCanvases] = useState<Canvas[]>([])
   const [canvasId, setCanvasId] = useState<string | null>(null)
@@ -100,6 +102,10 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
 
   const [docPreviews, setDocPreviews] = useState<Record<string, string>>({})
 
+  // Layout: 'force' = live Obsidian-style physics; 'free' = manual positions
+  const [layoutMode, setLayoutMode] = useState<'free' | 'force'>('free')
+  const livePositions = useRef(new Map<string, NodePosition>())
+
   const flowRef = useRef<HTMLDivElement>(null)
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -116,6 +122,8 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
   useEffect(() => { dbEdgesRef.current = dbEdges }, [dbEdges])
   useEffect(() => { canvasIdRef.current = canvasId }, [canvasId])
   const pendingSelectRef = useRef<string | null>(null)
+  const layoutModeRef = useRef(layoutMode)
+  layoutModeRef.current = layoutMode
   const inspectorNodeIdRef = useRef(inspectorNodeId)
   useEffect(() => { inspectorNodeIdRef.current = inspectorNodeId }, [inspectorNodeId])
 
@@ -154,8 +162,8 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
     if (!canvasId) return
     undoStack.current = []; redoStack.current = []
     setInspectorNodeId(null); setInspectorEdgeId(null)
-    Promise.all([window.api.canvas.listNodes(canvasId), window.api.canvas.listEdges(canvasId)])
-      .then(([n, e]) => { setDbNodes(n); setDbEdges(e) })
+    Promise.all([window.api.canvas.listNodes(canvasId), window.api.canvas.listEdges(canvasId), window.api.settings.get(`canvas_layout:${canvasId}`)])
+      .then(([n, e, mode]) => { setDbNodes(n); setDbEdges(e); setLayoutMode(mode === 'force' ? 'force' : 'free') })
   }, [canvasId])
 
   useEffect(() => {
@@ -217,10 +225,11 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
       return sorted.map((n) => {
         const color = resolveNodeColor(n, dbNodes)
         const dimmed = searchMatchIds !== null && !searchMatchIds.has(n.id)
+        const live = livePositions.current.get(n.id)
         const base: Node = {
           id: n.id,
           type: 'talent',
-          position: { x: n.pos_x, y: n.pos_y },
+          position: live ? { x: live.pos_x, y: live.pos_y } : { x: n.pos_x, y: n.pos_y },
           style: dimmed ? { opacity: 0.2 } : undefined,
           data: {
             label: n.label,
@@ -247,7 +256,7 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
         }
 
         if (n.type === 'group') {
-          base.style = { width: n.width ?? GROUP_DEFAULT_W, height: n.height ?? GROUP_DEFAULT_H, opacity: dimmed ? 0.2 : 1 }
+          base.style = { width: live?.width ?? n.width ?? GROUP_DEFAULT_W, height: live?.height ?? n.height ?? GROUP_DEFAULT_H, opacity: dimmed ? 0.2 : 1 }
           base.zIndex = -1
         }
 
@@ -289,12 +298,98 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
     )
   }, [dbEdges, dbNodes, hiddenNodeIds, searchMatchIds])
 
+  // ── Auto-layout ────────────────────────────────────────────────────────
+
+  const measure = useCallback((id: string): Size => {
+    const m = getInternalNode(id)?.measured
+    if (m?.width && m?.height) return { w: m.width, h: m.height }
+    const n = dbNodesRef.current.find((x) => x.id === id)
+    if (n?.type === 'note') return { w: 160, h: 72 }
+    const s = Math.round(80 * (n ? NODE_TYPE_META[n.type].scale : 1))
+    return { w: s, h: s }
+  }, [getInternalNode])
+
+  const force = useForceLayout({
+    enabled: layoutMode === 'force',
+    nodes: dbNodes,
+    edges: dbEdges,
+    hidden: hiddenNodeIds,
+    size: measure,
+    onTick: (positions) => {
+      const byId = new Map(positions.map((p) => [p.id, p]))
+      livePositions.current = byId
+      setNodes((nds) => nds.map((n) => {
+        const p = byId.get(n.id)
+        if (!p || (p.pos_x === n.position.x && p.pos_y === n.position.y && p.width == null)) return n
+        return {
+          ...n,
+          position: { x: p.pos_x, y: p.pos_y },
+          style: p.width != null ? { ...n.style, width: p.width, height: p.height ?? undefined } : n.style,
+        }
+      }))
+    },
+    onSettle: (positions) => {
+      if (!positions.length) return
+      window.api.canvas.updatePositions(positions)
+      setDbNodes((prev) => applyPositions(prev, positions))
+    },
+  })
+
+  const forceRef = useRef(force)
+  forceRef.current = force
+
+  function setLayout(mode: 'free' | 'force') {
+    if (mode === 'free') livePositions.current = new Map()
+    setLayoutMode(mode)
+    if (canvasId) window.api.settings.set(`canvas_layout:${canvasId}`, mode)
+  }
+
+  async function tidy(direction: LayoutDirection) {
+    const visible = new Set(dbNodes.filter((n) => !hiddenNodeIds.has(n.id)).map((n) => n.id))
+    if (!visible.size) return
+    if (layoutMode === 'force') { force.discard(); setLayout('free') }
+    livePositions.current = new Map()
+    const positions = resolveLayout(dbNodes, treeLayout(dbNodes, dbEdges, visible, measure, direction), measure)
+    pushSnapshot()
+    await window.api.canvas.updatePositions(positions)
+    setDbNodes((prev) => applyPositions(prev, positions))
+    setTimeout(() => fitView({ duration: 400, padding: 0.15 }), 60)
+  }
+
+  /** Absolute centres of the dragged nodes (a dragged group carries its members) */
+  function dragPins(dragged: Node[]): { id: string; x: number; y: number }[] {
+    const pins: { id: string; x: number; y: number }[] = []
+    for (const node of dragged) {
+      const abs = getInternalNode(node.id)?.internals.positionAbsolute
+      if (!abs) continue
+      if (dbNodesRef.current.find((n) => n.id === node.id)?.type === 'group') {
+        for (const m of getNodes()) {
+          if (m.parentId !== node.id) continue
+          const s = measure(m.id)
+          pins.push({ id: m.id, x: abs.x + m.position.x + s.w / 2, y: abs.y + m.position.y + s.h / 2 })
+        }
+      } else {
+        const s = measure(node.id)
+        pins.push({ id: node.id, x: abs.x + s.w / 2, y: abs.y + s.h / 2 })
+      }
+    }
+    return pins
+  }
+
+  const onNodeDrag: OnNodeDrag = (_e, _node, dragged) => {
+    if (layoutMode === 'force') force.pin(dragPins(dragged))
+  }
+
   // ── XYFlow handlers ────────────────────────────────────────────────────
 
   const onNodesChange: OnNodesChange = useCallback((changes) => setNodes((nds) => applyNodeChanges(changes, nds)), [])
   const onEdgesChange: OnEdgesChange = useCallback((changes) => setEdges((eds) => applyEdgeChanges(changes, eds)), [])
 
-  const onNodeDragStop: NodeMouseHandler = useCallback((_e, node) => {
+  const onNodeDragStop: OnNodeDrag = useCallback((_e, node, dragged) => {
+    if (layoutModeRef.current === 'force') {
+      const ids = dragged.flatMap((d) => [d.id, ...getNodes().filter((m) => m.parentId === d.id).map((m) => m.id)])
+      forceRef.current.release(ids)
+    }
     const dbNode = dbNodesRef.current.find((n) => n.id === node.id)
     if (!dbNode) return
 
@@ -751,6 +846,23 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
 
         <button className="btn btn-xs btn-ghost" title="Fit view (F)" onClick={() => fitView({ duration: 300 })}>⊡ Fit</button>
         <button className={`btn btn-xs ${snapToGrid ? 'btn-primary' : 'btn-ghost'}`} title="Snap to grid" onClick={() => setSnapToGrid((v) => !v)}># Snap</button>
+        <button
+          className={`btn btn-xs ${layoutMode === 'force' ? 'btn-primary' : 'btn-ghost'}`}
+          title="Auto-arrange: nodes push apart and links pull together, like Obsidian's graph view"
+          onClick={() => setLayout(layoutMode === 'force' ? 'free' : 'force')}
+        >🧲 Auto-arrange</button>
+        {/* Native select: a dropdown menu would be clipped by the toolbar's overflow-hidden */}
+        <select
+          className="select select-xs select-ghost w-auto font-semibold"
+          title="Arrange once as a tiered tree (undoable)"
+          value=""
+          onChange={(e) => { const dir = e.target.value as LayoutDirection; e.target.blur(); if (dir) tidy(dir) }}
+        >
+          <option value="" disabled>⇵ Tidy</option>
+          <option value="TB">↓ Top-down tree</option>
+          <option value="BT">↑ Bottom-up tree</option>
+          <option value="LR">→ Left-to-right</option>
+        </select>
 
         <div className="w-px h-4 bg-base-300" />
 
@@ -785,6 +897,8 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
           connectionMode={ConnectionMode.Loose}
           snapToGrid={snapToGrid} snapGrid={[16, 16]}
           onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+          onNodeDragStart={onNodeDrag}
+          onNodeDrag={onNodeDrag}
           onNodeDragStop={onNodeDragStop}
           onConnect={onConnect} onConnectEnd={onConnectEnd}
           onNodeClick={onNodeClick} onEdgeClick={onEdgeClick}
