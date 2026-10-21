@@ -451,7 +451,7 @@ const NODE_EDITABLE = [
   'collapsed', 'icon', 'shape', 'width', 'height',
   'description', 'max_rank', 'point_cost', 'requirements', 'prereq_mode',
 ] as const
-const EDGE_EDITABLE = ['color', 'label', 'animated', 'edge_style', 'kind', 'min_rank'] as const
+const EDGE_EDITABLE = ['from_id', 'to_id', 'color', 'label', 'animated', 'edge_style', 'kind', 'min_rank'] as const
 
 // Canvas CRUD
 

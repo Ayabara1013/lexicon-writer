@@ -1,9 +1,11 @@
 import { memo, useState } from 'react'
 import { Handle, Position, NodeResizer, type NodeProps } from '@xyflow/react'
+import type { CanvasNodeType, NodeShape } from '../env'
+import { NODE_TYPE_META, isTalentType, rankLabel, type NodeState } from '../talent/model'
 
-type TalentNodeData = {
+export type TalentNodeData = {
   label: string
-  nodeType: 'skill' | 'note' | 'group'
+  nodeType: CanvasNodeType
   color: string
   isCore: boolean
   linkedDocId: string | null
@@ -11,7 +13,13 @@ type TalentNodeData = {
   collapsed: boolean
   hiddenChildCount: number
   icon: string | null
-  shape: 'circle' | 'diamond' | 'hexagon' | 'square' | 'rectangle' | 'roundedSquare'
+  shape: NodeShape
+  description: string | null
+  maxRank: number
+  pointCost: number
+  prereqs: string[]        // "Fireball 3/5"
+  requirements: string[]   // human-readable extra requirements
+  preview: NodeState | null
   onDoubleClick?: () => void
   onResizeEnd?: (w: number, h: number) => void
 }
@@ -49,17 +57,171 @@ const TOOLTIP_STYLE: React.CSSProperties = {
   padding: '7px 10px',
   zIndex: 100,
   pointerEvents: 'none',
-  whiteSpace: 'nowrap',
   boxShadow: '0 4px 20px rgba(0,0,0,0.65)',
-  minWidth: 100,
+  minWidth: 120,
+  maxWidth: 240,
+  width: 'max-content',
 }
 
 function NodeTooltip({ d }: { d: TalentNodeData }) {
+  const talent = isTalentType(d.nodeType)
+  const reasons = d.preview?.reasons ?? []
   return (
     <div style={TOOLTIP_STYLE}>
       <div style={{ fontSize: 12, fontWeight: 600, color: '#e8e5f5', marginBottom: 2 }}>{d.label}</div>
-      <div style={{ fontSize: 10, color: d.color, textTransform: 'capitalize', letterSpacing: '0.04em' }}>{d.nodeType}</div>
+      <div style={{ fontSize: 10, color: d.color, letterSpacing: '0.04em' }}>
+        {NODE_TYPE_META[d.nodeType].label}
+        {talent && <span style={{ color: '#8b87a8' }}> · {d.maxRank} rank{d.maxRank === 1 ? '' : 's'} · {d.pointCost === 0 ? 'free' : `${d.pointCost} pt${d.pointCost === 1 ? '' : 's'}/rank`}</span>}
+      </div>
+      {d.description && <div style={{ fontSize: 11, color: '#c9c5e0', marginTop: 4, whiteSpace: 'pre-wrap' }}>{d.description}</div>}
+      {talent && (d.prereqs.length > 0 || d.requirements.length > 0) && (
+        <div style={{ fontSize: 10, color: '#8b87a8', marginTop: 4 }}>
+          {d.prereqs.length > 0 && <div>Requires: {d.prereqs.join(', ')}</div>}
+          {d.requirements.map((r, i) => <div key={i}>Requires: {r}</div>)}
+        </div>
+      )}
+      {reasons.length > 0 && (
+        <div style={{ fontSize: 10, color: '#f87171', marginTop: 4 }}>
+          {reasons.map((r, i) => <div key={i}>✕ {r}</div>)}
+        </div>
+      )}
       {d.linkedDocId && <div style={{ fontSize: 10, color: '#55507a', marginTop: 2 }}>→ linked document</div>}
+    </div>
+  )
+}
+
+function CollapsedBadge({ d, rotate }: { d: TalentNodeData; rotate?: boolean }) {
+  if (!d.collapsed || d.hiddenChildCount === 0) return null
+  return (
+    <span
+      className="absolute -bottom-2 -right-2 z-20 text-[9px] font-bold px-1 py-0.5 rounded-full text-white"
+      style={{ background: d.isCore ? '#4a4770' : d.color, minWidth: 16, textAlign: 'center', transform: rotate ? 'rotate(-45deg)' : undefined }}
+    >+{d.hiddenChildCount}</span>
+  )
+}
+
+/** Rank pips under the node (dots up to 6 ranks, then a "3/10" pill) */
+function RankPips({ d }: { d: TalentNodeData }) {
+  const rank = d.preview?.rank ?? 0
+  if (d.maxRank <= 1 && !d.preview) return null
+  const color = d.isCore ? '#8b87a8' : d.color
+  return (
+    <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-[3px] pointer-events-none" style={{ top: 'calc(100% + 5px)' }}>
+      {d.maxRank <= 6
+        ? Array.from({ length: d.maxRank }, (_, i) => (
+            <span key={i} className="rounded-full" style={{
+              width: 6, height: 6,
+              background: i < rank ? color : 'transparent',
+              border: `1px solid ${i < rank ? color : `${color}88`}`,
+              boxShadow: i < rank ? `0 0 4px ${color}` : 'none',
+            }} />
+          ))
+        : (
+            <span className="text-[9px] font-bold px-1.5 rounded-full" style={{ color: rank > 0 ? '#fff' : color, background: rank > 0 ? `${color}aa` : `${color}22`, border: `1px solid ${color}66` }}>
+              {rankLabel(rank, d.maxRank)}
+            </span>
+          )}
+    </div>
+  )
+}
+
+function CostBadge({ d }: { d: TalentNodeData }) {
+  if (d.pointCost === 1) return null
+  return (
+    <span className="absolute -top-2 -right-2 z-20 text-[9px] font-bold px-1 rounded-full pointer-events-none"
+      style={{ background: '#1a1825', color: d.isCore ? '#c9c5e0' : d.color, border: `1px solid ${d.isCore ? '#4a4770' : d.color}88` }}>
+      {d.pointCost === 0 ? 'free' : `${d.pointCost}pt`}
+    </span>
+  )
+}
+
+/** Opacity / glow multipliers for preview mode */
+function previewLook(d: TalentNodeData): { opacity: number; filter?: string; glow: number } {
+  const p = d.preview
+  if (!p) return { opacity: 1, glow: 1 }
+  if (p.state === 'locked') return { opacity: 0.3, filter: 'grayscale(0.85)', glow: 0 }
+  if (p.state === 'available') return { opacity: p.canAdd ? 0.95 : 0.55, glow: p.canAdd ? 0.6 : 0 }
+  return { opacity: 1, glow: p.state === 'maxed' ? 2.2 : 1.6 }
+}
+
+function TalentShape({ d, selected, hoverHandlers }: { d: TalentNodeData; selected: boolean; hoverHandlers: object }) {
+  const scale = NODE_TYPE_META[d.nodeType].scale
+  const S = Math.round(80 * scale)
+  const look = previewLook(d)
+  const allocated = !!d.preview && d.preview.rank > 0
+  const selColor = d.color ?? '#ffffff'
+  const stroke = d.isCore && !allocated ? '#4a4770' : d.color
+  const fill = d.isCore && !allocated
+    ? 'radial-gradient(circle, #2a2740 60%, #1a1830)'
+    : allocated
+      ? `radial-gradient(circle, ${d.color}88 30%, ${d.color}33)`
+      : `radial-gradient(circle, ${d.color}33 40%, ${d.color}11)`
+  const glow = look.glow === 0 || (d.isCore && !allocated) ? 'none' : `0 0 ${Math.round(12 * look.glow)}px ${d.color}${look.glow > 1 ? 'aa' : '55'}`
+  const keystoneRing = d.nodeType === 'keystone' ? `, 0 0 0 4px #13111e, 0 0 0 6px ${stroke}88` : ''
+  const shadow = selected ? `0 0 0 3px ${selColor}66, 0 0 16px ${selColor}44` : `${glow}${keystoneRing}`.replace(/^none, /, '')
+  const content = d.icon
+    ? <div className="leading-none" style={{ fontSize: Math.round(22 * scale) }}>{d.icon}</div>
+    : <span className="font-semibold text-center leading-tight text-white/90 overflow-hidden line-clamp-2 px-1" style={{ fontSize: d.nodeType === 'stat' ? 10 : 11, maxWidth: S - 8 }}>{d.label}</span>
+  const wrapper: React.CSSProperties = { opacity: look.opacity, filter: look.filter, transition: 'opacity 150ms, filter 150ms' }
+
+  if (d.shape === 'diamond') {
+    const D = Math.round(S * 0.8)
+    return (
+      <div className="relative flex items-center justify-center" style={{ width: S, height: S, ...wrapper }} {...hoverHandlers}>
+        <div
+          className="absolute flex items-center justify-center cursor-pointer select-none"
+          style={{ width: D, height: D, transform: 'rotate(45deg)', background: fill, border: `2px solid ${stroke}`, boxShadow: shadow }}
+          onDoubleClick={d.onDoubleClick}
+        >
+          <div style={{ transform: 'rotate(-45deg)' }}>{content}</div>
+        </div>
+        <CollapsedBadge d={d} />
+        <CostBadge d={d} />
+        <RankPips d={d} />
+      </div>
+    )
+  }
+
+  if (d.shape === 'hexagon') {
+    const H = Math.round(S * 0.9)
+    // clip-path swallows box-shadow, so hexagons glow via drop-shadow instead
+    const hexGlow = selected
+      ? `drop-shadow(0 0 8px ${selColor})`
+      : glow === 'none' ? '' : `drop-shadow(0 0 ${Math.round(6 * look.glow)}px ${d.color}88)`
+    return (
+      <div className="relative" style={{ width: S, height: H, ...wrapper, filter: [look.filter, hexGlow].filter(Boolean).join(' ') || undefined }} {...hoverHandlers}>
+        <div className="absolute inset-0" style={{ clipPath: hexClip, background: stroke }} />
+        <div
+          className="absolute flex items-center justify-center cursor-pointer select-none"
+          style={{ inset: d.nodeType === 'keystone' ? 3 : 2, clipPath: hexClip, background: '#13111e' }}
+          onDoubleClick={d.onDoubleClick}
+        >
+          <div className="absolute inset-0" style={{ background: fill }} />
+          <div className="relative z-10">{content}</div>
+        </div>
+        <CollapsedBadge d={d} />
+        <CostBadge d={d} />
+        <RankPips d={d} />
+      </div>
+    )
+  }
+
+  const isRect = d.shape === 'rectangle'
+  const w = isRect ? Math.round(S * 1.5) : S
+  const h = isRect ? Math.round(S * 0.75) : S
+  const radius = d.shape === 'circle' ? '50%' : d.shape === 'roundedSquare' ? 16 * scale : isRect ? 6 : 0
+  return (
+    <div className="relative" style={{ width: w, height: h, ...wrapper }} {...hoverHandlers}>
+      <div
+        className="w-full h-full flex items-center justify-center cursor-pointer select-none"
+        style={{ borderRadius: radius, background: fill, border: `2px solid ${stroke}`, boxShadow: shadow }}
+        onDoubleClick={d.onDoubleClick}
+      >
+        {content}
+      </div>
+      <CollapsedBadge d={d} />
+      <CostBadge d={d} />
+      <RankPips d={d} />
     </div>
   )
 }
@@ -67,9 +229,6 @@ function NodeTooltip({ d }: { d: TalentNodeData }) {
 function TalentNode({ data, selected }: NodeProps) {
   const d = data as TalentNodeData
   const selColor = d.color ?? '#ffffff'
-  const ringStyle = selected
-    ? { outline: `2px solid ${selColor}`, outlineOffset: 3, boxShadow: `0 0 16px ${selColor}55` }
-    : {}
   const [hovered, setHovered] = useState(false)
   const hoverHandlers = {
     onMouseEnter: () => setHovered(true),
@@ -114,159 +273,12 @@ function TalentNode({ data, selected }: NodeProps) {
     )
   }
 
-  if (d.nodeType === 'skill') {
-    const isDiamond = d.shape === 'diamond'
-    const isHex = d.shape === 'hexagon'
-    const isSquare = d.shape === 'square'
-    const isRect = d.shape === 'rectangle'
-    const isRounded = d.shape === 'roundedSquare'
-
-    if (isDiamond) {
-      return (
-        <>
-          {allHandles}
-          {hovered && <NodeTooltip d={d} />}
-          <div
-            className="relative flex items-center justify-center cursor-pointer select-none"
-            style={{
-              width: 80, height: 80,
-              transform: 'rotate(45deg)',
-              background: d.isCore
-                ? 'radial-gradient(circle, #2a2740 60%, #1a1830)'
-                : `${d.color}33`,
-              border: `2px solid ${d.isCore ? '#4a4770' : d.color}`,
-              boxShadow: selected
-                ? `0 0 0 2px ${selColor}66`
-                : d.isCore ? 'none' : `0 0 12px ${d.color}55`,
-            }}
-            onDoubleClick={d.onDoubleClick}
-            {...hoverHandlers}
-          >
-            <div style={{ transform: 'rotate(-45deg)', textAlign: 'center' }}>
-              {d.icon
-                ? <div className="text-xl leading-none">{d.icon}</div>
-                : <span className="text-[11px] font-semibold leading-tight text-white/90 max-w-[60px] block overflow-hidden line-clamp-2 px-1">{d.label}</span>
-              }
-            </div>
-            {d.collapsed && d.hiddenChildCount > 0 && (
-              <span
-                className="absolute -bottom-2 -right-2 text-[9px] font-bold px-1 py-0.5 rounded-full text-white"
-                style={{ transform: 'rotate(-45deg)', background: d.color, minWidth: 16, textAlign: 'center' }}
-              >+{d.hiddenChildCount}</span>
-            )}
-          </div>
-        </>
-      )
-    }
-
-    if (isHex) {
-      return (
-        <>
-          {allHandles}
-          {hovered && <NodeTooltip d={d} />}
-          <div
-            className="relative flex items-center justify-center cursor-pointer select-none"
-            style={{
-              width: 80, height: 72,
-              clipPath: hexClip,
-              background: d.isCore
-                ? 'radial-gradient(circle, #2a2740 60%, #1a1830)'
-                : `${d.color}33`,
-              boxShadow: selected ? `0 0 0 16px ${selColor}22` : d.isCore ? 'none' : `0 0 12px ${d.color}55`,
-            }}
-            onDoubleClick={d.onDoubleClick}
-            {...hoverHandlers}
-          >
-            {/* Inner hex border */}
-            <div style={{
-              position: 'absolute', inset: 2, clipPath: hexClip,
-              background: 'transparent',
-              border: `2px solid ${d.isCore ? '#4a4770' : d.color}`,
-            }}/>
-            {d.icon
-              ? <div className="text-xl leading-none relative z-10">{d.icon}</div>
-              : <span className="text-[11px] font-semibold leading-tight text-white/90 max-w-[60px] text-center relative z-10 px-1 line-clamp-2">{d.label}</span>
-            }
-            {d.collapsed && d.hiddenChildCount > 0 && (
-              <span
-                className="absolute -bottom-2 -right-2 z-20 text-[9px] font-bold px-1 py-0.5 rounded-full text-white"
-                style={{ background: d.color, minWidth: 16, textAlign: 'center' }}
-              >+{d.hiddenChildCount}</span>
-            )}
-          </div>
-        </>
-      )
-    }
-
-    if (isSquare || isRect || isRounded) {
-      const w = isRect ? 120 : 80
-      const h = isRect ? 60 : 80
-      const radius = isRounded ? 16 : isRect ? 6 : 0
-      return (
-        <>
-          {allHandles}
-          <div
-            className="relative flex items-center justify-center cursor-pointer select-none"
-            style={{
-              width: w, height: h,
-              borderRadius: radius,
-              background: d.isCore
-                ? 'radial-gradient(circle, #2a2740 60%, #1a1830)'
-                : `${d.color}33`,
-              border: `2px solid ${d.isCore ? '#4a4770' : d.color}`,
-              boxShadow: selected
-                ? `0 0 0 3px ${selColor}66, 0 0 16px ${selColor}44`
-                : d.isCore ? 'none' : `0 0 12px ${d.color}55`,
-            }}
-            onDoubleClick={d.onDoubleClick}
-            {...hoverHandlers}
-          >
-            {d.icon
-              ? <div className="text-2xl leading-none">{d.icon}</div>
-              : <span className="text-[11px] font-semibold text-center px-2 leading-tight text-white/90 overflow-hidden line-clamp-2">{d.label}</span>
-            }
-            {d.collapsed && d.hiddenChildCount > 0 && (
-              <span
-                className="absolute -bottom-2 -right-2 text-[9px] font-bold px-1 py-0.5 rounded-full text-white"
-                style={{ background: d.color, minWidth: 16, textAlign: 'center' }}
-              >+{d.hiddenChildCount}</span>
-            )}
-            {hovered && <NodeTooltip d={d} />}
-          </div>
-        </>
-      )
-    }
-
-    // Default: circle
+  if (isTalentType(d.nodeType)) {
     return (
       <>
         {allHandles}
-        <div
-          className="relative flex flex-col items-center justify-center rounded-full w-20 h-20 cursor-pointer select-none"
-          style={{
-            background: d.isCore
-              ? 'radial-gradient(circle, #2a2740 60%, #1a1830)'
-              : `radial-gradient(circle, ${d.color}33 40%, ${d.color}11)`,
-            border: `2px solid ${d.isCore ? '#4a4770' : d.color}`,
-            boxShadow: selected
-              ? `0 0 0 3px ${selColor}66, 0 0 16px ${selColor}44`
-              : d.isCore ? 'none' : `0 0 12px ${d.color}55, inset 0 0 8px ${d.color}22`,
-          }}
-          onDoubleClick={d.onDoubleClick}
-          {...hoverHandlers}
-        >
-          {d.icon
-            ? <div className="text-2xl leading-none">{d.icon}</div>
-            : <span className="text-xs text-center font-semibold px-1 leading-tight text-white/90 max-w-[72px] overflow-hidden line-clamp-2">{d.label}</span>
-          }
-          {d.collapsed && d.hiddenChildCount > 0 && (
-            <span
-              className="absolute -bottom-2 -right-2 text-[9px] font-bold px-1 py-0.5 rounded-full text-white"
-              style={{ background: d.isCore ? '#4a4770' : d.color, minWidth: 16, textAlign: 'center' }}
-            >+{d.hiddenChildCount}</span>
-          )}
-          {hovered && <NodeTooltip d={d} />}
-        </div>
+        {hovered && <NodeTooltip d={d} />}
+        <TalentShape d={d} selected={!!selected} hoverHandlers={hoverHandlers} />
       </>
     )
   }
@@ -280,10 +292,10 @@ function TalentNode({ data, selected }: NodeProps) {
         style={{
           background: '#1e1c2e',
           border: `2px solid ${d.color}`,
+          opacity: d.preview ? 0.5 : 1,
           boxShadow: selected
             ? `0 0 0 3px ${selColor}66, 0 0 12px ${selColor}44`
             : `0 0 8px ${d.color}44`,
-          ...ringStyle,
         }}
         onDoubleClick={d.onDoubleClick}
         {...hoverHandlers}

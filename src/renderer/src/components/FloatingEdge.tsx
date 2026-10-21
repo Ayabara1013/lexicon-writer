@@ -51,11 +51,14 @@ function FloatingEdge({
     const tH = targetNode.measured?.height ?? 80
     const sCX = sPos.x + sW / 2, sCY = sPos.y + sH / 2
     const tCX = tPos.x + tW / 2, tCY = tPos.y + tH / 2
-    const isCircle = (w: number, h: number) => w === h && w <= 84
-    const sp = isCircle(sW, sH)
+    const isCircle = (n: typeof sourceNode) => {
+      const d = n.data as { shape?: string; nodeType?: string }
+      return d.shape === 'circle' && d.nodeType !== 'note' && d.nodeType !== 'group'
+    }
+    const sp = isCircle(sourceNode)
       ? circleIntersection(sPos.x, sPos.y, sW / 2, tCX, tCY)
       : rectIntersection(sPos.x, sPos.y, sW, sH, tCX, tCY)
-    const tp = isCircle(tW, tH)
+    const tp = isCircle(targetNode)
       ? circleIntersection(tPos.x, tPos.y, tW / 2, sCX, sCY)
       : rectIntersection(tPos.x, tPos.y, tW, tH, sCX, sCY)
     ;[edgePath, labelX, labelY] = getStraightPath({ sourceX: sp.x, sourceY: sp.y, targetX: tp.x, targetY: tp.y })

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   ReactFlow, ReactFlowProvider, useReactFlow,
-  Background, Controls, MiniMap,
+  Background, Controls, MiniMap, Panel,
   applyNodeChanges, applyEdgeChanges, ConnectionMode,
   type Node, type Edge, type OnConnect, type OnNodesChange,
   type OnEdgesChange, type NodeMouseHandler, type EdgeMouseHandler,
@@ -10,8 +10,8 @@ import {
 } from '@xyflow/react'
 import { toPng } from 'html-to-image'
 import '@xyflow/react/dist/style.css'
-import type { Canvas, CanvasNode, CanvasEdge, CanvasNodeType, NodeShape, DocMeta } from '../env'
-import { isTalent } from '../talent/model'
+import type { Canvas, CanvasNode, CanvasEdge, CanvasNodeType, CanvasNodeFields, CanvasEdgeFields, NodeShape, DocMeta } from '../env'
+import { EDGE_KIND_META, EDGE_KINDS, NODE_TYPE_META, childTypeFor, describeRequirement, isTalent, parseRequirements, rankLabel } from '../talent/model'
 import TalentNode from './TalentNode'
 import FloatingEdge from './FloatingEdge'
 import CanvasInspector from './CanvasInspector'
@@ -37,8 +37,10 @@ type Snapshot = { nodes: CanvasNode[]; edges: CanvasEdge[] }
 
 // ── Color helpers ────────────────────────────────────────────────────────────
 
-function resolveEdgeColor(from: CanvasNode, to: CanvasNode, explicit: string | null, all: CanvasNode[]): string {
-  if (explicit) return explicit
+function resolveEdgeColor(from: CanvasNode, to: CanvasNode, edge: CanvasEdge, all: CanvasNode[]): string {
+  if (edge.color) return edge.color
+  const kindColor = EDGE_KIND_META[edge.kind]?.color
+  if (kindColor) return kindColor
   if (to.color) return to.color
   if (from.color) return from.color
   let cur: CanvasNode | undefined = from
@@ -113,6 +115,9 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
   useEffect(() => { dbNodesRef.current = dbNodes }, [dbNodes])
   useEffect(() => { dbEdgesRef.current = dbEdges }, [dbEdges])
   useEffect(() => { canvasIdRef.current = canvasId }, [canvasId])
+  const pendingSelectRef = useRef<string | null>(null)
+  const inspectorNodeIdRef = useRef(inspectorNodeId)
+  useEffect(() => { inspectorNodeIdRef.current = inspectorNodeId }, [inspectorNodeId])
 
   // Stable resize handler — always reads latest state
   const onResizeEndRef = useRef<(id: string, w: number, h: number) => void>(() => {})
@@ -177,6 +182,18 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
 
   // ── DB → XYFlow conversion ─────────────────────────────────────────────
 
+  const prereqLabels = useMemo(() => {
+    const byId = new Map(dbNodes.map((n) => [n.id, n]))
+    const out: Record<string, string[]> = {}
+    for (const e of dbEdges) {
+      if (e.kind !== 'prereq') continue
+      const src = byId.get(e.from_id)
+      if (!src) continue
+      ;(out[e.to_id] ??= []).push(`${src.label} ${rankLabel(Math.min(e.min_rank, src.max_rank), src.max_rank)}`)
+    }
+    return out
+  }, [dbNodes, dbEdges])
+
   const searchMatchIds = useMemo(() => {
     if (!searchQuery.trim()) return null
     const q = searchQuery.toLowerCase()
@@ -192,44 +209,57 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
       return 0
     })
 
-    setNodes(sorted.map((n) => {
-      const color = resolveNodeColor(n, dbNodes)
-      const dimmed = searchMatchIds !== null && !searchMatchIds.has(n.id)
-      const base: Node = {
-        id: n.id,
-        type: 'talent',
-        position: { x: n.pos_x, y: n.pos_y },
-        style: dimmed ? { opacity: 0.2 } : undefined,
-        data: {
-          label: n.label,
-          nodeType: n.type,
-          color,
-          isCore: !n.color && !n.parent_id && !n.group_id,
-          linkedDocId: n.linked_doc_id,
-          docPreview: n.linked_doc_id ? (docPreviews[n.linked_doc_id] ?? null) : null,
-          collapsed: !!n.collapsed,
-          hiddenChildCount: hiddenChildCounts[n.id] ?? 0,
-          icon: n.icon ?? null,
-          shape: (n.shape ?? 'circle') as 'circle' | 'diamond' | 'hexagon' | 'square' | 'rectangle' | 'roundedSquare',
-          onDoubleClick: n.linked_doc_id ? () => onOpenDoc(n.linked_doc_id!) : undefined,
-          onResizeEnd: n.type === 'group'
-            ? (w: number, h: number) => onResizeEndRef.current(n.id, w, h)
-            : undefined,
-        },
-      }
+    // Rebuilding from the DB would otherwise drop React Flow's selection on every edit
+    const pending = pendingSelectRef.current
+    pendingSelectRef.current = null
+    setNodes((prev) => {
+      const selected = pending ? new Set([pending]) : new Set(prev.filter((n) => n.selected).map((n) => n.id))
+      return sorted.map((n) => {
+        const color = resolveNodeColor(n, dbNodes)
+        const dimmed = searchMatchIds !== null && !searchMatchIds.has(n.id)
+        const base: Node = {
+          id: n.id,
+          type: 'talent',
+          position: { x: n.pos_x, y: n.pos_y },
+          style: dimmed ? { opacity: 0.2 } : undefined,
+          data: {
+            label: n.label,
+            nodeType: n.type,
+            color,
+            isCore: !n.color && !n.parent_id && !n.group_id,
+            linkedDocId: n.linked_doc_id,
+            docPreview: n.linked_doc_id ? (docPreviews[n.linked_doc_id] ?? null) : null,
+            collapsed: !!n.collapsed,
+            hiddenChildCount: hiddenChildCounts[n.id] ?? 0,
+            icon: n.icon ?? null,
+            shape: n.shape ?? 'circle',
+            description: n.description,
+            maxRank: n.max_rank ?? 1,
+            pointCost: n.point_cost ?? 1,
+            prereqs: prereqLabels[n.id] ?? [],
+            requirements: parseRequirements(n.requirements).map(describeRequirement),
+            preview: null,
+            onDoubleClick: n.linked_doc_id ? () => onOpenDoc(n.linked_doc_id!) : undefined,
+            onResizeEnd: n.type === 'group'
+              ? (w: number, h: number) => onResizeEndRef.current(n.id, w, h)
+              : undefined,
+          },
+        }
 
-      if (n.type === 'group') {
-        base.style = { width: n.width ?? GROUP_DEFAULT_W, height: n.height ?? GROUP_DEFAULT_H, opacity: dimmed ? 0.2 : 1 }
-        base.zIndex = -1
-      }
+        if (n.type === 'group') {
+          base.style = { width: n.width ?? GROUP_DEFAULT_W, height: n.height ?? GROUP_DEFAULT_H, opacity: dimmed ? 0.2 : 1 }
+          base.zIndex = -1
+        }
 
-      if (n.group_id) {
-        base.parentId = n.group_id
-      }
+        if (n.group_id) {
+          base.parentId = n.group_id
+        }
 
-      return base
-    }))
-  }, [dbNodes, hiddenNodeIds, hiddenChildCounts, docPreviews, onOpenDoc, searchMatchIds])
+        if (selected.has(n.id)) base.selected = true
+        return base
+      })
+    })
+  }, [dbNodes, hiddenNodeIds, hiddenChildCounts, docPreviews, onOpenDoc, searchMatchIds, prereqLabels])
 
   useEffect(() => {
     setEdges(dbEdges
@@ -237,15 +267,23 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
       .map((e) => {
         const from = dbNodes.find((n) => n.id === e.from_id)
         const to = dbNodes.find((n) => n.id === e.to_id)
-        const color = from && to ? resolveEdgeColor(from, to, e.color, dbNodes) : '#6b7280'
+        const color = from && to ? resolveEdgeColor(from, to, e, dbNodes) : '#6b7280'
         const dimmed = searchMatchIds !== null && !searchMatchIds.has(e.from_id) && !searchMatchIds.has(e.to_id)
+        const meta = EDGE_KIND_META[e.kind] ?? EDGE_KIND_META.related
+        // Prereqs that need more than one rank show it, e.g. "3/5"
+        const rankHint = e.kind === 'prereq' && from && isTalent(from) && e.min_rank > 1
+          ? rankLabel(Math.min(e.min_rank, from.max_rank), from.max_rank)
+          : undefined
         return {
           id: e.id, type: 'floating',
           source: e.from_id, target: e.to_id,
           animated: !!e.animated,
-          style: { stroke: color, strokeWidth: 2, opacity: dimmed ? 0.15 : 1 },
-          markerEnd: { type: MarkerType.ArrowClosed, color },
-          data: { label: e.label ?? undefined, edgeStyle: e.edge_style ?? 'straight' },
+          style: {
+            stroke: color, strokeWidth: meta.width, strokeDasharray: meta.dash,
+            opacity: dimmed ? 0.15 : e.kind === 'related' ? 0.6 : 1,
+          },
+          markerEnd: meta.arrow ? { type: MarkerType.ArrowClosed, color } : undefined,
+          data: { label: e.label ?? rankHint, edgeStyle: e.edge_style ?? 'straight' },
         }
       })
     )
@@ -316,11 +354,10 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
     if (!connection.source || !connection.target) return
     const from = dbNodes.find((n) => n.id === connection.source)
     const to = dbNodes.find((n) => n.id === connection.target)
-    const edgeColor = to?.color ?? from?.color
     // Linking is not parenting — sub-nodes are created explicitly (drag to empty space / Tab)
     const kind = from && to && isTalent(from) && isTalent(to) ? 'prereq' : 'related'
     pushSnapshot()
-    window.api.canvas.createEdge(connection.source, connection.target, edgeColor, kind).then((newEdge) => {
+    window.api.canvas.createEdge(connection.source, connection.target, null, kind).then((newEdge) => {
       setDbEdges((prev) => [...prev, newEdge])
     })
   }, [dbNodes])
@@ -331,19 +368,12 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
     const clientY = 'touches' in event ? event.touches[0]?.clientY : (event as MouseEvent).clientY
     if (clientX == null || clientY == null) return
     const pos = screenToFlowPosition({ x: clientX, y: clientY })
-    const sourceId = state.fromNode.id
-    const source = dbNodes.find((n) => n.id === sourceId)
-    const color = source?.color ?? undefined
-    const type = source && isTalent(source) ? source.type : 'skill'
-    pushSnapshot()
-    window.api.canvas.createNode(canvasId, { label: 'New Node', type, pos_x: pos.x - 40, pos_y: pos.y - 40, color, parent_id: sourceId })
-      .then(async (newNode) => {
-        setDbNodes((prev) => [...prev, newNode])
-        const newEdge = await window.api.canvas.createEdge(sourceId, newNode.id, color, isTalent(newNode) ? 'prereq' : 'related')
-        setDbEdges((prev) => [...prev, newEdge])
-        setEditingNodeId(newNode.id); setEditingLabel(newNode.label)
-      })
-  }, [canvasId, dbNodes, screenToFlowPosition])
+    const parent = dbNodesRef.current.find((n) => n.id === state.fromNode!.id)
+    if (!parent || parent.type === 'group') return
+    // Sub-node joins the parent's group, so convert to the group's relative space
+    const group = parent.group_id ? dbNodesRef.current.find((n) => n.id === parent.group_id) : undefined
+    addSubNode(parent.id, { x: pos.x - 40 - (group?.pos_x ?? 0), y: pos.y - 40 - (group?.pos_y ?? 0) })
+  }, [canvasId, screenToFlowPosition])
 
   const onNodeClick: NodeMouseHandler = useCallback((_e, node) => {
     setInspectorNodeId(node.id); setInspectorEdgeId(null); closeMenu()
@@ -379,12 +409,79 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
       type,
       pos_x: isGroup ? pos.x - GROUP_DEFAULT_W / 2 : pos.x,
       pos_y: isGroup ? pos.y - GROUP_DEFAULT_H / 2 : pos.y,
+      shape: NODE_TYPE_META[type].shape,
       color,
       width: isGroup ? GROUP_DEFAULT_W : undefined,
       height: isGroup ? GROUP_DEFAULT_H : undefined,
     })
     setDbNodes((prev) => [...prev, newNode]); closeMenu()
     setEditingNodeId(newNode.id); setEditingLabel(newNode.label)
+  }
+
+  /** Create a child of `parentId` (sub-node) linked by a prereq, then start renaming it */
+  async function addSubNode(parentId: string, at?: { x: number; y: number }) {
+    const cid = canvasIdRef.current
+    const all = dbNodesRef.current
+    const parent = all.find((n) => n.id === parentId)
+    if (!cid || !parent || parent.type === 'group') return
+    const type = childTypeFor(parent)
+    // Fan children out under the parent: centre, left, right, further left…
+    const i = all.filter((n) => n.parent_id === parentId).length
+    const dx = i === 0 ? 0 : (i % 2 === 1 ? -1 : 1) * Math.ceil(i / 2) * 120
+    pushSnapshot()
+    const child = await window.api.canvas.createNode(cid, {
+      label: type === 'note' ? 'New Note' : 'New Node',
+      type,
+      shape: NODE_TYPE_META[type].shape,
+      pos_x: at?.x ?? parent.pos_x + dx,
+      pos_y: at?.y ?? parent.pos_y + 150,
+      parent_id: parent.id,
+      group_id: parent.group_id,
+    })
+    const edge = await window.api.canvas.createEdge(parent.id, child.id, null, isTalent(parent) && isTalent(child) ? 'prereq' : 'related')
+    setDbNodes((prev) => [...prev, child])
+    setDbEdges((prev) => [...prev, edge])
+    selectOnly(child.id)
+    setEditingNodeId(child.id); setEditingLabel(child.label)
+  }
+
+  /** New node next to `nodeId` — under the same parent if it has one */
+  async function addSiblingNode(nodeId: string) {
+    const cid = canvasIdRef.current
+    const node = dbNodesRef.current.find((n) => n.id === nodeId)
+    if (!cid || !node || node.type === 'group') return
+    if (node.parent_id && dbNodesRef.current.some((n) => n.id === node.parent_id)) return addSubNode(node.parent_id)
+    pushSnapshot()
+    const sib = await window.api.canvas.createNode(cid, {
+      label: node.type === 'note' ? 'New Note' : 'New Node',
+      type: node.type,
+      shape: NODE_TYPE_META[node.type].shape,
+      pos_x: node.pos_x + 140,
+      pos_y: node.pos_y,
+      group_id: node.group_id,
+    })
+    setDbNodes((prev) => [...prev, sib])
+    selectOnly(sib.id)
+    setEditingNodeId(sib.id); setEditingLabel(sib.label)
+  }
+
+  function selectOnly(id: string) {
+    // A brand-new node isn't in React Flow yet — select it on the next DB → XYFlow rebuild
+    if (!getNodes().some((n) => n.id === id)) pendingSelectRef.current = id
+    setNodes((nds) => nds.map((n) => (n.selected === (n.id === id) ? n : { ...n, selected: n.id === id })))
+    setInspectorNodeId(id); setInspectorEdgeId(null)
+  }
+
+  async function updateNodeFields(id: string, fields: CanvasNodeFields) {
+    pushSnapshot()
+    await window.api.canvas.updateNode(id, fields)
+    setDbNodes((prev) => prev.map((n) => n.id === id ? { ...n, ...fields } : n))
+  }
+
+  async function updateEdgeFields(id: string, fields: CanvasEdgeFields) {
+    pushSnapshot()
+    await window.api.canvas.updateEdge(id, fields)
+    setDbEdges((prev) => prev.map((e) => e.id === id ? { ...e, ...fields } : e))
   }
 
   async function deleteNodes(ids: string[], edgeIds: string[] = []) {
@@ -424,9 +521,11 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
   }
 
   async function setNodeType(id: string, type: CanvasNodeType) {
-    pushSnapshot()
-    await window.api.canvas.updateNode(id, { type })
-    setDbNodes((prev) => prev.map((n) => n.id === id ? { ...n, type } : n))
+    const node = dbNodes.find((n) => n.id === id)
+    if (!node) return
+    const fields: CanvasNodeFields = { type }
+    if (node.shape === NODE_TYPE_META[node.type].shape || !isTalent(node)) fields.shape = NODE_TYPE_META[type].shape
+    await updateNodeFields(id, fields)
   }
 
   async function setNodeLinkedDoc(id: string, docId: string | null) {
@@ -573,6 +672,15 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
       if (e.ctrlKey && !e.shiftKey && e.key === 'z') { e.preventDefault(); undo(); return }
       if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'z')) { e.preventDefault(); redo(); return }
       if (e.key === 'f' || e.key === 'F') { fitView({ duration: 300 }); return }
+      if (e.key === 'Tab' || e.key === 'Enter') {
+        const sel = getNodes().filter((n) => n.selected)
+        const target = sel.length === 1 ? sel[0].id : sel.length === 0 ? inspectorNodeIdRef.current : null
+        if (!target) return
+        e.preventDefault()
+        if (e.key === 'Tab') addSubNode(target)
+        else addSiblingNode(target)
+        return
+      }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         deleteNodes(
           getNodes().filter((n) => n.selected).map((n) => n.id),
@@ -665,7 +773,7 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
 
         <div className="flex-1" />
         <span className="text-[10px] text-base-content/20 select-none pr-1 hidden lg:block">
-          S · N · G = add node · F = fit · Del = delete · Ctrl+Z/Y = undo/redo
+          S · N · G = add · Tab = sub-node · Enter = sibling · F = fit · Del = delete · Ctrl+Z/Y
         </span>
       </div>
 
@@ -687,6 +795,19 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
           fitView colorMode="dark" className="bg-base-100"
         >
           <Background color="#2a2740" gap={16} />
+          <Panel position="top-left">
+            <div className="bg-base-200/90 border border-base-300 rounded-md px-2 py-1.5 text-[10px] text-base-content/60 flex flex-col gap-1 select-none">
+              {EDGE_KINDS.map((k) => {
+                const m = EDGE_KIND_META[k]
+                return (
+                  <div key={k} className="flex items-center gap-1.5" title={m.hint}>
+                    <svg width="22" height="6"><line x1="0" y1="3" x2={m.arrow ? 17 : 22} y2="3" stroke={m.color ?? '#9ca3af'} strokeWidth={m.width} strokeDasharray={m.dash} opacity={k === 'related' ? 0.6 : 1} />{m.arrow && <polygon points="16,0 22,3 16,6" fill="#9ca3af" />}</svg>
+                    {m.label}
+                  </div>
+                )
+              })}
+            </div>
+          </Panel>
           <Controls />
           <MiniMap nodeColor={(n) => (n.data?.color as string) ?? '#4a4770'} nodeStrokeColor={(n) => (n.data?.color as string) ?? '#6b7280'} nodeStrokeWidth={2} maskColor="#13111ecc" pannable zoomable />
         </ReactFlow>
@@ -694,7 +815,11 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
         <CanvasInspector
           node={inspectorNode}
           edge={inspectorEdge}
+          allNodes={dbNodes}
+          allEdges={dbEdges}
           docs={docs}
+          onSelectNode={selectOnly}
+          onSelectEdge={(id) => { setInspectorEdgeId(id); setInspectorNodeId(null) }}
           onClose={() => { setInspectorNodeId(null); setInspectorEdgeId(null) }}
           nodeCallbacks={{
             onLabelChange: setNodeLabel,
@@ -705,6 +830,7 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
             onLinkedDocChange: setNodeLinkedDoc,
             onCollapseToggle: toggleCollapse,
             onRemoveFromGroup: removeFromGroup,
+            onFieldsChange: updateNodeFields,
             onDelete: deleteNode,
           }}
           edgeCallbacks={{
@@ -712,6 +838,7 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
             onColorChange: setEdgeColor,
             onAnimatedToggle: setEdgeAnimated,
             onEdgeStyleChange: setEdgeStyle,
+            onFieldsChange: updateEdgeFields,
             onDelete: deleteEdge,
           }}
         />
@@ -738,6 +865,12 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
                 {dbNodes.find((n) => n.id === contextMenu.nodeId)?.type === 'group' ? 'Group' : 'Node'}
               </div>
               <button className="w-full text-left px-3 py-1.5 text-sm hover:bg-base-300" onClick={() => startEditLabel(contextMenu.nodeId!)}>✏️ Rename</button>
+              {contextNode && contextNode.type !== 'group' && (
+                <>
+                  <button className="w-full text-left px-3 py-1.5 text-sm hover:bg-base-300 flex justify-between" onClick={() => { closeMenu(); addSubNode(contextMenu.nodeId!) }}>↳ Add sub-node <span className="text-base-content/30 text-xs">Tab</span></button>
+                  <button className="w-full text-left px-3 py-1.5 text-sm hover:bg-base-300 flex justify-between" onClick={() => { closeMenu(); addSiblingNode(contextMenu.nodeId!) }}>⇥ Add sibling <span className="text-base-content/30 text-xs">Enter</span></button>
+                </>
+              )}
               {dbNodes.find((n) => n.id === contextMenu.nodeId)?.type !== 'group' && (
                 <button className="w-full text-left px-3 py-1.5 text-sm hover:bg-base-300" onClick={() => { toggleCollapse(contextMenu.nodeId!); closeMenu() }}>
                   {dbNodes.find((n) => n.id === contextMenu.nodeId)?.collapsed ? '▶ Expand' : '▼ Collapse'}
@@ -759,9 +892,12 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
           ) : (
             <>
               <div className="px-3 py-1 text-xs text-base-content/40 font-semibold uppercase tracking-wide">Add node</div>
-              <button className="w-full text-left px-3 py-1.5 text-sm hover:bg-base-300" onClick={() => addNode('skill')}>⚡ Skill node</button>
-              <button className="w-full text-left px-3 py-1.5 text-sm hover:bg-base-300" onClick={() => addNode('note')}>📄 Note node</button>
-              <button className="w-full text-left px-3 py-1.5 text-sm hover:bg-base-300" onClick={() => addNode('group')}>▣ Group</button>
+              {(['skill', 'passive', 'stat', 'keystone', 'note', 'group'] as const).map((t) => (
+                <button key={t} className="w-full text-left px-3 py-1.5 text-sm hover:bg-base-300 flex justify-between gap-3" title={NODE_TYPE_META[t].hint} onClick={() => addNode(t)}>
+                  <span>{NODE_TYPE_META[t].icon} {NODE_TYPE_META[t].label}</span>
+                  <span className="text-base-content/30 text-xs">{NODE_TYPE_META[t].hint}</span>
+                </button>
+              ))}
               <div className="px-3 py-1 text-xs text-base-content/40">Colored skill</div>
               <div className="flex gap-1 px-3 pb-2">
                 {EDGE_COLORS.map((c) => <button key={c.value} className="w-5 h-5 rounded-full" title={`${c.label} skill`} style={{ background: c.value }} onClick={() => addNode('skill', c.value)} />)}

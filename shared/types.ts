@@ -93,5 +93,5 @@ export type CanvasNodeInit = {
 }
 
 export type CanvasNodeFields = Partial<Omit<CanvasNode, 'id' | 'canvas_id' | 'deleted_at'>>
-export type CanvasEdgeFields = Partial<Pick<CanvasEdge, 'color' | 'label' | 'animated' | 'edge_style' | 'kind' | 'min_rank'>>
+export type CanvasEdgeFields = Partial<Pick<CanvasEdge, 'from_id' | 'to_id' | 'color' | 'label' | 'animated' | 'edge_style' | 'kind' | 'min_rank'>>
 export type NodePosition = { id: string; pos_x: number; pos_y: number; width?: number | null; height?: number | null }
