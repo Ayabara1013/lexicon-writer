@@ -3,6 +3,7 @@ web/node_modules
 out
 release
 dist
+dist-demo
 .DS_Store
 writing-backups/
 *.tsbuildinfo

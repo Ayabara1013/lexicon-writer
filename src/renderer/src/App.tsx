@@ -14,11 +14,16 @@ import SettingsView from './components/SettingsView'
 import { DEFAULT_NORMAL_IDS, DEFAULT_FOCUS_IDS } from './toolbarItems'
 
 export type View = 'editor' | 'overview' | 'corkboard' | 'canvas' | 'timeline' | 'stats' | 'history' | 'settings'
+const VIEWS: View[] = ['editor', 'overview', 'corkboard', 'canvas', 'timeline', 'stats', 'history', 'settings']
+
+// Deep link, e.g. ?view=canvas (used by the browser preview build; Electron loads without a query)
+const requestedView = new URLSearchParams(window.location.search).get('view') as View | null
+const INITIAL_VIEW: View = requestedView && VIEWS.includes(requestedView) ? requestedView : 'editor'
 
 export default function App() {
   const [docs, setDocs] = useState<DocMeta[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [view, setView] = useState<View>('editor')
+  const [view, setView] = useState<View>(INITIAL_VIEW)
   const [error, setError] = useState<string | null>(null)
   const [toolbarNormal, setToolbarNormal] = useState<string[]>(DEFAULT_NORMAL_IDS)
   const [toolbarFocus, setToolbarFocus] = useState<string[]>(DEFAULT_FOCUS_IDS)
@@ -29,7 +34,7 @@ export default function App() {
   const [historyFilterDoc, setHistoryFilterDoc] = useState<string | null>(null)
 
   const navHistory = useRef<Array<{ view: View; activeId: string | null }>>([])
-  const currentNav = useRef({ view: 'editor' as View, activeId: null as string | null })
+  const currentNav = useRef({ view: INITIAL_VIEW, activeId: null as string | null })
 
   function pushNav() {
     navHistory.current = [...navHistory.current.slice(-30), { ...currentNav.current }]
