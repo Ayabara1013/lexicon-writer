@@ -56,12 +56,13 @@ function resolveEdgeColor(from: CanvasNode, to: CanvasNode, edge: CanvasEdge, al
   return '#6b7280'
 }
 
-function resolveNodeColor(node: CanvasNode, all: CanvasNode[]): string {
+/** Own colour, else the group's, else the nearest coloured ancestor's; null = uncoloured all the way up */
+function resolveNodeColor(node: CanvasNode, all: CanvasNode[]): string | null {
   if (node.color) return node.color
   if (node.group_id) { const g = all.find((n) => n.id === node.group_id); if (g?.color) return g.color }
   let cur: CanvasNode | undefined = node
   while (cur?.parent_id) { const p = all.find((n) => n.id === cur!.parent_id); if (p?.color) return p.color; cur = p }
-  return '#6b7280'
+  return null
 }
 
 function getDescendants(nodeId: string, all: CanvasNode[]): Set<string> {
@@ -250,7 +251,8 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
     setNodes((prev) => {
       const selected = pending ? new Set([pending]) : new Set(prev.filter((n) => n.selected).map((n) => n.id))
       return sorted.map((n) => {
-        const color = resolveNodeColor(n, dbNodes)
+        const resolved = resolveNodeColor(n, dbNodes)
+        const color = resolved ?? '#6b7280'
         const dimmed = searchMatchIds !== null && !searchMatchIds.has(n.id)
         const live = livePositions.current.get(n.id)
         const base: Node = {
@@ -262,7 +264,8 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
             label: n.label,
             nodeType: n.type,
             color,
-            isCore: !n.color && !n.parent_id && !n.group_id,
+            // Uncoloured nodes (including uncoloured sub-nodes) share the neutral "core" look
+            isCore: resolved === null,
             linkedDocId: n.linked_doc_id,
             docPreview: n.linked_doc_id ? (docPreviews[n.linked_doc_id] ?? null) : null,
             collapsed: !!n.collapsed,
@@ -476,30 +479,53 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
     setDbNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, pos_x: absX, pos_y: absY } : n))
   }, [])
 
-  const onConnect: OnConnect = useCallback((connection: Connection) => {
-    if (!connection.source || !connection.target) return
-    const from = dbNodes.find((n) => n.id === connection.source)
-    const to = dbNodes.find((n) => n.id === connection.target)
-    // Linking is not parenting — sub-nodes are created explicitly (drag to empty space / Tab)
-    const kind = from && to && isTalent(from) && isTalent(to) ? 'prereq' : 'related'
+  /** Link two existing nodes. Linking is not parenting — sub-nodes are created explicitly (drag to empty space / Tab) */
+  function linkNodes(fromId: string, toId: string) {
+    if (fromId === toId) return
+    const from = dbNodesRef.current.find((n) => n.id === fromId)
+    const to = dbNodesRef.current.find((n) => n.id === toId)
+    if (!from || !to) return
+    if (dbEdgesRef.current.some((e) => (e.from_id === fromId && e.to_id === toId) || (e.from_id === toId && e.to_id === fromId))) {
+      flash(`${from.label} and ${to.label} are already linked`)
+      return
+    }
+    const kind = isTalent(from) && isTalent(to) ? 'prereq' : 'related'
     pushSnapshot()
-    window.api.canvas.createEdge(connection.source, connection.target, null, kind).then((newEdge) => {
+    window.api.canvas.createEdge(fromId, toId, null, kind).then((newEdge) => {
       setDbEdges((prev) => [...prev, newEdge])
     })
-  }, [dbNodes])
+  }
 
-  const onConnectEnd = useCallback((event: MouseEvent | TouchEvent, state: FinalConnectionState) => {
+  /** Topmost non-group node under a flow-space point */
+  function nodeAt(p: { x: number; y: number }, exclude: string): string | null {
+    for (const n of [...getNodes()].reverse()) {
+      if (n.id === exclude || dbNodesRef.current.find((x) => x.id === n.id)?.type === 'group') continue
+      const internal = getInternalNode(n.id)
+      const abs = internal?.internals.positionAbsolute
+      const w = internal?.measured.width, h = internal?.measured.height
+      if (abs && w && h && p.x >= abs.x && p.x <= abs.x + w && p.y >= abs.y && p.y <= abs.y + h) return n.id
+    }
+    return null
+  }
+
+  const onConnect: OnConnect = (connection: Connection) => {
+    if (connection.source && connection.target) linkNodes(connection.source, connection.target)
+  }
+
+  const onConnectEnd = (event: MouseEvent | TouchEvent, state: FinalConnectionState) => {
     if (state.isValid || !state.fromNode || !canvasId) return
-    const clientX = 'touches' in event ? event.touches[0]?.clientX : (event as MouseEvent).clientX
-    const clientY = 'touches' in event ? event.touches[0]?.clientY : (event as MouseEvent).clientY
-    if (clientX == null || clientY == null) return
-    const pos = screenToFlowPosition({ x: clientX, y: clientY })
+    const point = 'changedTouches' in event ? event.changedTouches[0] : (event as MouseEvent)
+    if (!point) return
+    const pos = screenToFlowPosition({ x: point.clientX, y: point.clientY })
+    // Dropped on a node's body rather than exactly on a handle → connect to it, don't stack a new node on top
+    const hit = nodeAt(pos, state.fromNode.id)
+    if (hit) { linkNodes(state.fromNode.id, hit); return }
     const parent = dbNodesRef.current.find((n) => n.id === state.fromNode!.id)
     if (!parent || parent.type === 'group') return
     // Sub-node joins the parent's group, so convert to the group's relative space
     const group = parent.group_id ? dbNodesRef.current.find((n) => n.id === parent.group_id) : undefined
     addSubNode(parent.id, { x: pos.x - 40 - (group?.pos_x ?? 0), y: pos.y - 40 - (group?.pos_y ?? 0) })
-  }, [canvasId, screenToFlowPosition])
+  }
 
   // ── Preview mode ───────────────────────────────────────────────────────
 
@@ -706,9 +732,10 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
     setDbNodes((prev) => prev
       .filter((n) => !doomed.has(n.id))
       .map((n) => releasedById.get(n.id) ?? (n.parent_id && doomed.has(n.parent_id) ? { ...n, parent_id: null } : n)))
-    setDbEdges((prev) => prev.filter((e) => !doomedEdges.has(e.id) && !doomed.has(e.from_id) && !doomed.has(e.to_id)))
-    if (inspectorNodeId && doomed.has(inspectorNodeId)) setInspectorNodeId(null)
-    if (inspectorEdgeId && doomedEdges.has(inspectorEdgeId)) setInspectorEdgeId(null)
+    const goneEdges = new Set(dbEdgesRef.current.filter((e) => doomedEdges.has(e.id) || doomed.has(e.from_id) || doomed.has(e.to_id)).map((e) => e.id))
+    setDbEdges((prev) => prev.filter((e) => !goneEdges.has(e.id)))
+    setInspectorNodeId((cur) => (cur && doomed.has(cur) ? null : cur))
+    setInspectorEdgeId((cur) => (cur && goneEdges.has(cur) ? null : cur))
     closeMenu()
   }
 
@@ -1044,6 +1071,8 @@ function TalentCanvasInner({ docs, onOpenDoc }: Props) {
           nodes={nodes} edges={edges}
           nodeTypes={nodeTypes} edgeTypes={edgeTypes}
           connectionMode={ConnectionMode.Loose}
+          // Our Delete/Backspace handler persists deletes; React Flow's own would only hide nodes
+          deleteKeyCode={null}
           nodesDraggable={!previewMode}
           nodesConnectable={!previewMode}
           elementsSelectable={!previewMode}
