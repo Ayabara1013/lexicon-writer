@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react'
 import type { DocMeta } from './env'
 import Sidebar from './components/Sidebar'
 import Editor from './components/Editor'
+import CharacterGenerator from './components/CharacterGenerator'
 
 export default function App() {
   const [docs, setDocs] = useState<DocMeta[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [view, setView] = useState<'editor' | 'generator'>('editor')
 
   const [error, setError] = useState<string | null>(null)
 
@@ -21,11 +23,18 @@ export default function App() {
     const doc = await window.api.docs.create(title, type)
     setDocs((prev) => [...prev, doc])
     setActiveId(doc.id)
+    setView('editor')
   }
 
   async function handleRename(id: string, title: string) {
     await window.api.docs.update(id, { title })
     setDocs((prev) => prev.map((d) => (d.id === id ? { ...d, title } : d)))
+  }
+
+  async function handleSaveGenerated(title: string, content: string) {
+    const doc = await window.api.docs.create(title, 'note')
+    await window.api.docs.update(doc.id, { content })
+    setDocs((prev) => [...prev, doc])
   }
 
   async function handleDelete(id: string) {
@@ -47,14 +56,18 @@ export default function App() {
     <div className="flex h-screen bg-base-100 text-base-content" data-theme="lexicon">
       <Sidebar
         docs={docs}
-        activeId={activeId}
-        onSelect={setActiveId}
+        activeId={view === 'editor' ? activeId : null}
+        generatorActive={view === 'generator'}
+        onSelect={(id) => { setActiveId(id); setView('editor') }}
+        onOpenGenerator={() => setView('generator')}
         onCreate={handleCreate}
         onRename={handleRename}
         onDelete={handleDelete}
       />
       <main className="flex-1 overflow-hidden">
-        {activeId ? (
+        {view === 'generator' ? (
+          <CharacterGenerator onSaveNote={handleSaveGenerated} />
+        ) : activeId ? (
           <Editor key={activeId} docId={activeId} />
         ) : (
           <div className="flex h-full items-center justify-center text-base-content/30 text-sm">
