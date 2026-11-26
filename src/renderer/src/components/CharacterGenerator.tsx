@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { pools, jobCategories, jobSources, raceSources } from '@shared/character/pools'
+import { DEFAULT_GENRE, pools, uniqueSorted } from '@shared/character/pools'
 import {
   TRAIT_MAX,
   TRAIT_MIN,
+  availableGenres,
   characterTitle,
+  filterJobs,
+  filterRaces,
   generateCharacter,
   pickPronouns,
   toHtml,
@@ -20,9 +23,45 @@ type Locks = Record<'race' | 'gender' | 'job' | 'traits', boolean>
 
 const LOCKABLE: (keyof Locks)[] = ['race', 'gender', 'job', 'traits']
 const TRAIT_COUNTS = ['auto', ...Array.from({ length: TRAIT_MAX - TRAIT_MIN + 1 }, (_, i) => String(TRAIT_MIN + i))]
+const PICKABLE_GENRES = availableGenres()
 
 function toggle(list: string[], value: string): string[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value]
+}
+
+function ChoiceRow({
+  label,
+  values,
+  selected,
+  onSelect,
+  format = (value) => value
+}: {
+  label: string
+  values: string[]
+  selected: string
+  onSelect: (value: string) => void
+  format?: (value: string) => string
+}) {
+  return (
+    <div className="space-y-1.5">
+      <span className="text-xs font-medium text-base-content/60">{label}</span>
+      <div className="flex flex-wrap gap-1.5">
+        {values.map((value) => (
+          <button
+            key={value}
+            onClick={() => onSelect(value)}
+            className={`px-2 py-1 rounded-md text-xs border transition-colors ${
+              selected === value
+                ? 'bg-primary/20 border-primary/50 text-primary'
+                : 'border-base-300 text-base-content/50 hover:text-base-content hover:border-base-content/30'
+            }`}
+          >
+            {format(value)}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function FilterRow({
@@ -113,6 +152,7 @@ function Field({
 }
 
 export default function CharacterGenerator({ onSaveNote }: Props) {
+  const [genre, setGenre] = useState<string>(DEFAULT_GENRE)
   const [raceFilter, setRaceFilter] = useState<string[]>([])
   const [jobSourceFilter, setJobSourceFilter] = useState<string[]>([])
   const [jobCategoryFilter, setJobCategoryFilter] = useState<string[]>([])
@@ -126,13 +166,26 @@ export default function CharacterGenerator({ onSaveNote }: Props) {
 
   const options: GenerateOptions = useMemo(
     () => ({
+      genre,
       raceSources: raceFilter,
       jobSources: jobSourceFilter,
       jobCategories: jobCategoryFilter,
       traitCount: traitCount === 'auto' ? undefined : Number(traitCount)
     }),
-    [raceFilter, jobSourceFilter, jobCategoryFilter, traitCount]
+    [genre, raceFilter, jobSourceFilter, jobCategoryFilter, traitCount]
   )
+
+  const raceSources = useMemo(() => uniqueSorted(filterRaces({ genre }).map((r) => r.source)), [genre])
+  const jobSources = useMemo(() => uniqueSorted(filterJobs({ genre }).map((j) => j.source)), [genre])
+  const jobCategories = useMemo(() => uniqueSorted(filterJobs({ genre }).map((j) => j.category)), [genre])
+
+  // Source and category chips differ per genre, so selections from the old genre would only empty the pools.
+  function changeGenre(next: string) {
+    setGenre(next)
+    setRaceFilter([])
+    setJobSourceFilter([])
+    setJobCategoryFilter([])
+  }
 
   const roll = useCallback(
     (only?: CharacterField) => {
@@ -212,6 +265,9 @@ export default function CharacterGenerator({ onSaveNote }: Props) {
 
       {showFilters && (
         <div className="px-6 py-4 border-b border-base-300 bg-base-200/50 space-y-4">
+          {PICKABLE_GENRES.length > 1 && (
+            <ChoiceRow label="Genre" values={PICKABLE_GENRES} selected={genre} onSelect={changeGenre} />
+          )}
           <FilterRow
             label="Race source"
             values={raceSources}
@@ -230,24 +286,13 @@ export default function CharacterGenerator({ onSaveNote }: Props) {
             selected={jobCategoryFilter}
             onToggle={(v) => setJobCategoryFilter((prev) => toggle(prev, v))}
           />
-          <div className="space-y-1.5">
-            <span className="text-xs font-medium text-base-content/60">Traits</span>
-            <div className="flex flex-wrap gap-1.5">
-              {TRAIT_COUNTS.map((value) => (
-                <button
-                  key={value}
-                  onClick={() => setTraitCount(value)}
-                  className={`px-2 py-1 rounded-md text-xs border transition-colors ${
-                    traitCount === value
-                      ? 'bg-primary/20 border-primary/50 text-primary'
-                      : 'border-base-300 text-base-content/50 hover:text-base-content hover:border-base-content/30'
-                  }`}
-                >
-                  {value === 'auto' ? `auto (${TRAIT_MIN}–${TRAIT_MAX})` : value}
-                </button>
-              ))}
-            </div>
-          </div>
+          <ChoiceRow
+            label="Traits"
+            values={TRAIT_COUNTS}
+            selected={traitCount}
+            onSelect={setTraitCount}
+            format={(value) => (value === 'auto' ? `auto (${TRAIT_MIN}–${TRAIT_MAX})` : value)}
+          />
         </div>
       )}
 

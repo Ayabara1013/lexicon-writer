@@ -1,10 +1,15 @@
-import { pools } from './pools'
-import type { Character, Gender, Job, Race, Trait } from './types'
+import { DEFAULT_GENRE, GENERIC_GENRE, genres, pools } from './pools'
+import type { Character, Gender, Job, PoolItem, Race, Trait } from './types'
 
 export const TRAIT_MIN = 3
 export const TRAIT_MAX = 5
 
+/** A genre is only offered once every pool has this many entries for it, so a half-seeded genre stays hidden. */
+export const GENRE_MIN_ENTRIES = 5
+
 export type GenerateOptions = {
+  /** Only roll entries that fit this genre. Omitted means every genre. */
+  genre?: string
   /** Restrict races to these sources. Empty or omitted means "any". */
   raceSources?: string[]
   /** Restrict jobs to these sources. Empty or omitted means "any". */
@@ -45,14 +50,46 @@ function matchesAny(value: string, allowed?: string[]): boolean {
   return !allowed || allowed.length === 0 || allowed.includes(value)
 }
 
+export function fitsGenre(item: PoolItem, genre?: string): boolean {
+  if (!genre) return true
+  const fits = item.genres ?? [DEFAULT_GENRE]
+  return fits.includes(GENERIC_GENRE) || fits.includes(genre)
+}
+
 export function filterRaces(options: GenerateOptions = {}): Race[] {
-  return pools.races.filter((race) => matchesAny(race.source, options.raceSources))
+  return pools.races.filter(
+    (race) => fitsGenre(race, options.genre) && matchesAny(race.source, options.raceSources)
+  )
+}
+
+export function filterGenders(options: GenerateOptions = {}): Gender[] {
+  return pools.genders.filter((gender) => fitsGenre(gender, options.genre))
 }
 
 export function filterJobs(options: GenerateOptions = {}): Job[] {
   return pools.jobs.filter(
-    (job) => matchesAny(job.source, options.jobSources) && matchesAny(job.category, options.jobCategories)
+    (job) =>
+      fitsGenre(job, options.genre) &&
+      matchesAny(job.source, options.jobSources) &&
+      matchesAny(job.category, options.jobCategories)
   )
+}
+
+export function filterTraits(options: GenerateOptions = {}): Trait[] {
+  return pools.traits.filter((trait) => fitsGenre(trait, options.genre))
+}
+
+export function availableGenres(): string[] {
+  return genres.filter((genre) => {
+    const traits = filterTraits({ genre })
+    return [
+      filterRaces({ genre }),
+      filterGenders({ genre }),
+      filterJobs({ genre }),
+      traits.filter((t) => t.kind === 'personality'),
+      traits.filter((t) => t.kind === 'lore')
+    ].every((pool) => pool.length >= GENRE_MIN_ENTRIES)
+  })
 }
 
 function clampTraitCount(count: number): number {
@@ -70,8 +107,9 @@ export function pickTraits(options: GenerateOptions = {}): Trait[] {
       ? TRAIT_MIN + Math.floor(random() * (TRAIT_MAX - TRAIT_MIN + 1))
       : clampTraitCount(options.traitCount)
 
-  const personality = shuffle(pools.traits.filter((t) => t.kind === 'personality'), random)
-  const lore = shuffle(pools.traits.filter((t) => t.kind === 'lore'), random)
+  const pool = filterTraits(options)
+  const personality = shuffle(pool.filter((t) => t.kind === 'personality'), random)
+  const lore = shuffle(pool.filter((t) => t.kind === 'lore'), random)
 
   const wantedLore = Math.min(lore.length, Math.max(1, Math.round(total * 0.4)))
   const chosen = [...personality.slice(0, total - wantedLore), ...lore.slice(0, wantedLore)]
@@ -79,7 +117,7 @@ export function pickTraits(options: GenerateOptions = {}): Trait[] {
   // If one kind ran short, top up from whatever is left rather than returning too few.
   if (chosen.length < total) {
     const taken = new Set(chosen.map((t) => t.id))
-    chosen.push(...shuffle(pools.traits, random).filter((t) => !taken.has(t.id)).slice(0, total - chosen.length))
+    chosen.push(...shuffle(pool, random).filter((t) => !taken.has(t.id)).slice(0, total - chosen.length))
   }
 
   if (chosen.length === 0) throw new EmptyPoolError('traits')
@@ -98,7 +136,7 @@ export function generateCharacter(options: GenerateOptions = {}, keep: KeptField
   const random = options.random ?? Math.random
 
   const race = keep.race ?? pick(filterRaces(options), 'races', random)
-  const gender = keep.gender ?? pick(pools.genders, 'gender identities', random)
+  const gender = keep.gender ?? pick(filterGenders(options), 'gender identities', random)
   const pronouns = keep.gender && keep.pronouns ? keep.pronouns : pickPronouns(gender, random)
   const job = keep.job ?? pick(filterJobs(options), 'jobs', random)
   const traits = keep.traits ?? pickTraits(options)
