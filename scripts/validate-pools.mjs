@@ -10,17 +10,33 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const poolDir = join(root, 'src/shared/character/pools')
 
 const SCHEMAS = {
-  'races.json': { required: ['id', 'name', 'source', 'description'], optional: ['tags'] },
-  'genders.json': { required: ['id', 'name', 'source', 'pronouns', 'description'], optional: ['tags'] },
-  'jobs.json': { required: ['id', 'name', 'source', 'category', 'description'], optional: ['tags'] },
-  'traits.json': { required: ['id', 'name', 'kind', 'description'], optional: ['tags'] }
+  'races.json': { required: ['id', 'name', 'source', 'description'], optional: ['tags', 'genres'] },
+  'genders.json': { required: ['id', 'name', 'source', 'pronouns', 'description'], optional: ['tags', 'genres'] },
+  'jobs.json': { required: ['id', 'name', 'source', 'category', 'description'], optional: ['tags', 'genres'] },
+  'traits.json': { required: ['id', 'name', 'kind', 'description'], optional: ['tags', 'genres'] }
 }
 
 const TRAIT_KINDS = ['personality', 'lore']
 const MIN_TRAITS_PER_KIND = 10
+// Keep in sync with GENERIC_GENRE / DEFAULT_GENRE in src/shared/character/pools/index.ts.
+const GENERIC_GENRE = 'generic'
+const DEFAULT_GENRE = 'fantasy'
 
 const errors = []
 const summary = []
+
+let GENRES = []
+try {
+  GENRES = JSON.parse(readFileSync(join(poolDir, 'genres.json'), 'utf-8'))
+  if (!Array.isArray(GENRES) || !GENRES.every(isNonEmptyString) || new Set(GENRES).size !== GENRES.length) {
+    errors.push('genres.json: must be an array of unique non-empty strings')
+  }
+  for (const required of [GENERIC_GENRE, DEFAULT_GENRE]) {
+    if (!GENRES.includes(required)) errors.push(`genres.json: must include "${required}"`)
+  }
+} catch (e) {
+  errors.push(`genres.json: not valid JSON — ${e.message}`)
+}
 
 function fail(file, index, message) {
   errors.push(`${file}[${index}]: ${message}`)
@@ -48,6 +64,7 @@ for (const [file, schema] of Object.entries(SCHEMAS)) {
   const names = new Map()
   const kindCounts = {}
   const sourceCounts = {}
+  const genreCounts = {}
 
   items.forEach((item, i) => {
     if (typeof item !== 'object' || item === null || Array.isArray(item)) {
@@ -88,6 +105,24 @@ for (const [file, schema] of Object.entries(SCHEMAS)) {
       fail(file, i, 'tags must be an array of non-empty strings')
     }
 
+    if ('genres' in item) {
+      const genres = item.genres
+      if (!Array.isArray(genres) || genres.length === 0 || !genres.every(isNonEmptyString)) {
+        fail(file, i, 'genres must be a non-empty array of strings')
+      } else {
+        for (const genre of genres) {
+          if (!GENRES.includes(genre)) fail(file, i, `unknown genre "${genre}" — add it to genres.json first`)
+        }
+        if (new Set(genres).size !== genres.length) fail(file, i, 'genres lists the same genre twice')
+        if (genres.includes(GENERIC_GENRE) && genres.length > 1) {
+          fail(file, i, `"${GENERIC_GENRE}" already means every genre, so list it alone`)
+        }
+      }
+    }
+    for (const genre of Array.isArray(item.genres) ? item.genres : [DEFAULT_GENRE]) {
+      genreCounts[genre] = (genreCounts[genre] ?? 0) + 1
+    }
+
     if (file === 'genders.json') {
       if (!Array.isArray(item.pronouns) || item.pronouns.length === 0 || !item.pronouns.every(isNonEmptyString)) {
         fail(file, i, 'pronouns must be a non-empty array of strings')
@@ -122,6 +157,8 @@ for (const [file, schema] of Object.entries(SCHEMAS)) {
           .join(', ')
 
   summary.push(`${file.padEnd(14)} ${String(items.length).padStart(4)} entries  (${detail})`)
+  const genreDetail = GENRES.map((g) => `${g} ${genreCounts[g] ?? 0}`).join(', ')
+  summary.push(`${''.padEnd(14)}      genres   (${genreDetail})`)
 }
 
 console.log(summary.join('\n'))
