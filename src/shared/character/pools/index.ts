@@ -2,6 +2,7 @@ import racesJson from './races.json'
 import gendersJson from './genders.json'
 import jobsJson from './jobs.json'
 import traitsJson from './traits.json'
+import genresJson from './genres.json'
 import type { Gender, Job, Pools, Race, Trait } from '../types'
 
 export const pools: Pools = {
@@ -11,10 +12,14 @@ export const pools: Pools = {
   traits: traitsJson as Trait[]
 }
 
-function unique(values: string[]): string[] {
+/** Matches every genre; never offered as a choice itself. */
+export const GENERIC_GENRE = 'generic'
+/** What an entry without a `genres` field counts as. */
+export const DEFAULT_GENRE = 'fantasy'
+
+/** Genres a character can be generated for. */
+export const genres: string[] = (genresJson as string[]).filter((g) => g !== GENERIC_GENRE)
+
+export function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort((a, b) => a.localeCompare(b))
 }
-
-export const raceSources = unique(pools.races.map((r) => r.source))
-export const jobSources = unique(pools.jobs.map((j) => j.source))
-export const jobCategories = unique(pools.jobs.map((j) => j.category))

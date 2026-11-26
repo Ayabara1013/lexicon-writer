@@ -3,6 +3,8 @@ export type PoolItem = {
   name: string
   description: string
   tags?: string[]
+  /** Settings this entry fits, from pools/genres.json. Omitted means ["fantasy"]; "generic" means every genre. */
+  genres?: string[]
 }
 
 export type Race = PoolItem & {
