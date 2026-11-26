@@ -8,19 +8,21 @@ changing this file changes what the routine does.
 
 1. Read [`character-pools.md`](./character-pools.md) for the entry format and style guide.
 2. Read all four pool files in `src/shared/character/pools/` in full, so you know what already exists.
-3. Add new entries in three batches — fantasy, sci-fi, and generic — each with the same counts.
+3. Add new entries in three batches — fantasy, sci-fi, and generic.
    See [Genres](./character-pools.md#genres) for what each label means.
 
-   |                                    | Fantasy (`genres` omitted) | Sci-fi (`["scifi"]`) | Generic (`["generic"]`) |
-   | ---------------------------------- | -------------------------- | -------------------- | ----------------------- |
-   | `races.json`                       | 5                          | 5                    | up to 5                 |
-   | `genders.json`                     | up to 3                    | up to 3              | up to 3                 |
-   | `jobs.json`                        | 5                          | 5                    | 5                       |
-   | `traits.json` (≈5 personality, 3 lore) | 8                      | 8                    | 8                       |
+   |                | Fantasy (`genres` omitted) | Sci-fi (`["scifi"]`) | Generic (`["generic"]`) |
+   | -------------- | -------------------------- | -------------------- | ----------------------- |
+   | `races.json`   | 3                          | 5                    | up to 2                 |
+   | `genders.json` | up to 1                    | up to 3              | up to 1                 |
+   | `jobs.json`    | 3                          | 5                    | 3                       |
+   | `traits.json`  | 5 (≈3 personality, 2 lore) | 8 (≈5 personality, 3 lore) | 5 (≈3 personality, 2 lore) |
 
-   Generic races are rare by nature — a race usually belongs to a world — so treat that cell as a
-   ceiling and add fewer, or none, when nothing truly fits every setting. Every gender cell is a
-   ceiling too (see below). An entry that fits two genres but not all of them (for example
+   Sci-fi gets the most because its pools started empty; fantasy gets fewer because its pools are
+   large and near-duplicates are the main risk. Expect these to be rebalanced once sci-fi has a
+   few hundred entries. Generic races are rare by nature — a race usually belongs to a world — so
+   add fewer, or none, when nothing truly fits every setting. "Up to" cells are ceilings, not
+   quotas (see Genders below). An entry that fits two genres but not all of them (for example
    `["fantasy", "scifi"]`) counts towards either batch, not both.
 4. Run `npm run validate:pools`. Fix anything it reports.
 5. Run `npm run typecheck`.
